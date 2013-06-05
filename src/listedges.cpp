@@ -9,6 +9,7 @@
 #include "g2o/solvers/csparse/linear_solver_csparse.h"
 #include "g2o/core/robust_kernel_impl.h"
 #include "g2o/types/slam2d/types_slam2d.cpp"
+#include "g2o/types/slam3d/types_slam3d.cpp"
 
 int main(int argc, char**argv){
   if(argc < 2){
