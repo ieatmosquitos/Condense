@@ -30,9 +30,13 @@ std::vector<g2o::EdgeSE3PointXYZ *> edgesLandmarks;
 void * ids[MAX_IDS];
 
 int _starLength = 20;
-int _optimizationSteps = 30;
-bool _clusterize = true;
+int _optimizationSteps = 100;
+bool _createPosesEdges = false;
 
+// clustering stuff
+bool _clusterize = true; // if false, no clusters are made and ONLY BINARY EDGES ARE CREATED
+int _max_clusters = 8;
+int _max_landmarks_per_edge = -1; // set lesser than 1 to let the edge be as big as it wants
 
 // clusterizes the edges set in the given star and creates edges according to these clusters
 void computeSharedEdges(Star3D * s){
@@ -66,16 +70,20 @@ void computeSharedEdges(Star3D * s){
     values[index + 2] = est[2];
   }
   
+  if(shared.size() < 1) return;
+  
   if(shared.size() < 2){
-    // just create 1 edge
-    // TODO!!!
+    g2o::EdgeSE3LotsOfXYZ * edge = new g2o::EdgeSE3LotsOfXYZ();
+    edge->setSize(2);
+    edge->vertices()[0] = s->poses[s->gauge_index]->vertex;
+    edge->vertices()[0] = shared[0]->vertex;
+    s->edgesShared.insert(edge);
     return;
   }
   
   int labels[shared.size()];
   
-  int max_clusters = 8;
-  int clusters = findClusters(values, 3, labels, &means, shared.size(), max_clusters);
+  int clusters = findClusters(values, 3, labels, &means, shared.size(), _max_clusters);
   
   std::cout << "found " << clusters << " clusters" << std::endl;
   
@@ -142,8 +150,7 @@ void computeCondensedEdges(Star3D * s){
     }
     int labels[s->landmarks.size()];
     
-    int max_clusters = 8;
-    int clusters = findClusters(values, 3, labels, &means, s->landmarks.size(), max_clusters);
+    int clusters = findClusters(values, 3, labels, &means, s->landmarks.size(), _max_clusters);
     std::cout << "found " << clusters << " clusters" << std::endl;
     
     for(unsigned int c=0; c<clusters; c++){
@@ -437,19 +444,21 @@ int main(int argc, char ** argv){
     
     // shared variables:
     // the first and the last pose are always shared (except for the first and the last star)
-    if(star_index>0){
-      g2o::EdgeSE3 * edge = new g2o::EdgeSE3();
-      edge->vertices()[0] = s->poses[s->gauge_index]->vertex;
-      edge->vertices()[1] = s->poses[0]->vertex;
-      //s->edgesShared.insert(edge);
+    if(_createPosesEdges){
+      if(star_index>0){
+	g2o::EdgeSE3 * edge = new g2o::EdgeSE3();
+	edge->vertices()[0] = s->poses[s->gauge_index]->vertex;
+	edge->vertices()[1] = s->poses[0]->vertex;
+	s->edgesShared.insert(edge);
+      }
+      if(star_index<stars.size()-1){
+	g2o::EdgeSE3 * edge = new g2o::EdgeSE3();
+	edge->vertices()[0] = s->poses[s->gauge_index]->vertex;
+	edge->vertices()[1] = s->poses[s->poses.size()-1]->vertex;
+	s->edgesShared.insert(edge);
+      }
     }
-    if(star_index<stars.size()-1){
-      g2o::EdgeSE3 * edge = new g2o::EdgeSE3();
-      edge->vertices()[0] = s->poses[s->gauge_index]->vertex;
-      edge->vertices()[1] = s->poses[s->poses.size()-1]->vertex;
-      //s->edgesShared.insert(edge);
-    }
-    
+
     if(_clusterize){
       std::cout << "clustering shared landmarks..." <<std::endl;
       computeSharedEdges(s);
@@ -466,21 +475,23 @@ int main(int argc, char ** argv){
     
     
     // create condensed measurements for the local variables
-    for(unsigned int i=0; i<s->poses.size(); i++){
+    if(_createPosesEdges){
+      for(unsigned int i=0; i<s->poses.size(); i++){
       
-      if(i==s->gauge_index) continue;
+	if(i==s->gauge_index) continue;
       
-      g2o::EdgeSE3 * edge = new g2o::EdgeSE3();
-      if(i<s->gauge_index){
-    	edge->vertices()[0] = s->poses[i]->vertex;
-    	edge->vertices()[1] = s->poses[s->gauge_index]->vertex;
+	g2o::EdgeSE3 * edge = new g2o::EdgeSE3();
+	if(i<s->gauge_index){
+	  edge->vertices()[0] = s->poses[i]->vertex;
+	  edge->vertices()[1] = s->poses[s->gauge_index]->vertex;
+	}
+	else{
+	  edge->vertices()[0] = s->poses[s->gauge_index]->vertex;
+	  edge->vertices()[1] = s->poses[i]->vertex;
+	}
+      
+	s->edgesCondensed.insert(edge);
       }
-      else{
-    	edge->vertices()[0] = s->poses[s->gauge_index]->vertex;
-    	edge->vertices()[1] = s->poses[i]->vertex;
-      }
-      
-      //s->edgesCondensed.insert(edge);
     }
     
     if(_clusterize){

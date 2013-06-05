@@ -1,0 +1,2 @@
+edges binari:
+      •	l'inserimento degli edges posa-posa sfancuora l'ottimizzazione quando l'initial guess è 0, 0, 0
