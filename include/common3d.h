@@ -14,16 +14,6 @@
 #define DEBUGMESS(X)
 #endif
 
-/* struct Pose3D{ */
-/*   g2o::VertexSE3 * vertex; */
-/*   std::vector<g2o::EdgeSE3PointXYZ *> _edges; */
-/* }; */
-
-/* struct Landmark3D{ */
-/*   g2o::VertexPointXYZ * vertex; */
-/*   std::vector<g2o::EdgeSE3PointXYZ *> _edges; */
-/* }; */
-
 struct VertexWrapper{
   g2o::OptimizableGraph::Vertex * vertex;
   std::vector<g2o::EdgeSE3PointXYZ *> edges;

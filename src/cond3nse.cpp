@@ -31,12 +31,14 @@ void * ids[MAX_IDS];
 
 int _starLength = 20;
 int _optimizationSteps = 100;
-bool _createPosesEdges = false;
+
+// studying impact of poses edges on optimizability
+bool _createPosesEdges = true;
 
 // clustering stuff
-bool _clusterize = true; // if false, no clusters are made and ONLY BINARY EDGES ARE CREATED
-int _max_clusters = 8;
-int _max_landmarks_per_edge = -1; // set lesser than 1 to let the edge be as big as it wants
+bool _clusterize = false; // if false, no clusters are made and ONLY BINARY EDGES ARE CREATED
+int _max_clusters = 6;
+int _max_landmarks_per_edge = 5; // set lesser than 1 to let the edge be as big as it wants
 
 // clusterizes the edges set in the given star and creates edges according to these clusters
 void computeSharedEdges(Star3D * s){
@@ -94,13 +96,37 @@ void computeSharedEdges(Star3D * s){
 	to.push_back(shared[i]);
       }
     }
-    g2o::EdgeSE3LotsOfXYZ * edge = new g2o::EdgeSE3LotsOfXYZ();
-    edge->setSize(1+to.size());
-    edge->vertices()[0] = s->poses[s->gauge_index]->vertex;
-    for(unsigned int i=0; i<to.size(); i++){
-      edge->vertices()[1+i] = to[i]->vertex;
+    if(_max_landmarks_per_edge < 1 || _max_landmarks_per_edge > to.size()){
+      // create an edge connecting the gauge to all the landmarks in the cluster
+      g2o::EdgeSE3LotsOfXYZ * edge = new g2o::EdgeSE3LotsOfXYZ();
+      edge->setSize(1+to.size());
+      edge->vertices()[0] = s->poses[s->gauge_index]->vertex;
+      for(unsigned int i=0; i<to.size(); i++){
+	edge->vertices()[1+i] = to[i]->vertex;
+      }
+      s->edgesShared.insert(edge);
     }
-    s->edgesShared.insert(edge);
+    else{
+      // create many edges connecting the gauge to subsets of the cluster
+      unsigned int count = 0;
+      unsigned int last_index = to.size() - 1;
+      while(count < to.size()){
+	unsigned int so_many = _max_landmarks_per_edge;
+	if(count + so_many > to.size()){
+	  so_many = to.size() - count;
+	}
+	
+	g2o::EdgeSE3LotsOfXYZ * edge = new g2o::EdgeSE3LotsOfXYZ();
+	edge->setSize(1 + so_many);
+	edge->vertices()[0] = s->poses[s->gauge_index]->vertex;
+	for(unsigned int v=0; v<so_many; v++){
+	  edge->vertices()[1+v] = to[count+v]->vertex;
+	}
+	s->edgesShared.insert(edge);
+	
+	count += so_many;
+      }
+    }
   }
   
   
@@ -136,30 +162,44 @@ void computeBinarySharedEdges(Star3D * s){
 
 
 void computeCondensedEdges(Star3D * s){
-  if(s->landmarks.size() > 1){
-    double values[s->landmarks.size()*3];
-    double * means = (double *) malloc(sizeof(double));
-    // populate the values array
+  
+  if(s->landmarks.size() < 1) return;
+  
+  if(s->landmarks.size() == 1){
+    g2o::EdgeSE3LotsOfXYZ * edge = new g2o::EdgeSE3LotsOfXYZ();
+    edge->setSize(2);
+    edge->vertices()[0] = s->poses[s->gauge_index]->vertex;
+    edge->vertices()[1] = s->landmarks[0]->vertex;
+    s->edgesCondensed.insert(edge);
+    return;
+  }
+  
+  
+  double values[s->landmarks.size()*3];
+  double * means = (double *) malloc(sizeof(double));
+  // populate the values array
+  for(unsigned int i=0; i<s->landmarks.size(); i++){
+    g2o::VertexPointXYZ * l = (g2o::VertexPointXYZ *) s->landmarks[i]->vertex;
+    unsigned int index = i*3;
+    Eigen::Vector3d est = l->estimate();
+    values[index] = est[0];
+    values[index+1] = est[1];
+    values[index+2] = est[2];
+  }
+  int labels[s->landmarks.size()];
+    
+  int clusters = findClusters(values, 3, labels, &means, s->landmarks.size(), _max_clusters);
+  std::cout << "found " << clusters << " clusters" << std::endl;
+  
+  for(unsigned int c=0; c<clusters; c++){
+    std::vector<VertexWrapper *> to;
     for(unsigned int i=0; i<s->landmarks.size(); i++){
-      g2o::VertexPointXYZ * l = (g2o::VertexPointXYZ *) s->landmarks[i]->vertex;
-      unsigned int index = i*3;
-      Eigen::Vector3d est = l->estimate();
-      values[index] = est[0];
-      values[index+1] = est[1];
-      values[index+2] = est[2];
-    }
-    int labels[s->landmarks.size()];
-    
-    int clusters = findClusters(values, 3, labels, &means, s->landmarks.size(), _max_clusters);
-    std::cout << "found " << clusters << " clusters" << std::endl;
-    
-    for(unsigned int c=0; c<clusters; c++){
-      std::vector<VertexWrapper *> to;
-      for(unsigned int i=0; i<s->landmarks.size(); i++){
-	if(labels[i] == c){
-	  to.push_back(s->landmarks[i]);
-	}
+      if(labels[i] == c){
+	to.push_back(s->landmarks[i]);
       }
+    }
+    if(_max_landmarks_per_edge < 1 || _max_landmarks_per_edge > to.size()){
+      // create an edge connecting the gauge to all the landmarks in the cluster
       g2o::EdgeSE3LotsOfXYZ * edge = new g2o::EdgeSE3LotsOfXYZ();
       edge->setSize(1+to.size());
       edge->vertices()[0] = s->poses[s->gauge_index]->vertex;
@@ -168,8 +208,28 @@ void computeCondensedEdges(Star3D * s){
       }
       s->edgesCondensed.insert(edge);
     }
+    else{
+      // create many edges connecting the gauge to subsets of the cluster
+      unsigned int count = 0;
+      unsigned int last_index = to.size() - 1;
+      while(count < to.size()){
+	unsigned int so_many = _max_landmarks_per_edge;
+	if(count + so_many > to.size()){
+	  so_many = to.size() - count;
+	}
+	
+	g2o::EdgeSE3LotsOfXYZ * edge = new g2o::EdgeSE3LotsOfXYZ();
+	edge->setSize(1 + so_many);
+	edge->vertices()[0] = s->poses[s->gauge_index]->vertex;
+	for(unsigned int v=0; v<so_many; v++){
+	  edge->vertices()[1+v] = to[count+v]->vertex;
+	}
+	s->edgesCondensed.insert(edge);
+	
+	count += so_many;
+      }
+    }
   }
-  
 }
 
 
@@ -481,14 +541,10 @@ int main(int argc, char ** argv){
 	if(i==s->gauge_index) continue;
       
 	g2o::EdgeSE3 * edge = new g2o::EdgeSE3();
-	if(i<s->gauge_index){
-	  edge->vertices()[0] = s->poses[i]->vertex;
-	  edge->vertices()[1] = s->poses[s->gauge_index]->vertex;
-	}
-	else{
-	  edge->vertices()[0] = s->poses[s->gauge_index]->vertex;
-	  edge->vertices()[1] = s->poses[i]->vertex;
-	}
+	
+	edge->vertices()[0] = s->poses[s->gauge_index]->vertex;
+	edge->vertices()[1] = s->poses[i]->vertex;
+	
       
 	s->edgesCondensed.insert(edge);
       }
