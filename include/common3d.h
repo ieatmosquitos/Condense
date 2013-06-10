@@ -16,7 +16,7 @@
 
 struct VertexWrapper{
   g2o::OptimizableGraph::Vertex * vertex;
-  std::vector<g2o::EdgeSE3PointXYZ *> edges;
+  std::vector<g2o::OptimizableGraph::Edge *> edges;
 };
 
 struct Star3D{
@@ -26,7 +26,7 @@ struct Star3D{
   int gauge_index;
   
   std::vector<VertexWrapper *> landmarks;
-  std::vector<g2o::EdgeSE3PointXYZ *> edgesLandmarks;
+  std::vector<g2o::OptimizableGraph::Edge *> edgesLandmarks;
   
   std::set<g2o::OptimizableGraph::Edge *> edgesShared;
   std::set<g2o::OptimizableGraph::Edge *> edgesCondensed;

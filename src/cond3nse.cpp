@@ -25,12 +25,12 @@ typedef g2o::LinearSolverCSparse<SlamBlockSolver::PoseMatrixType> SlamLinearSolv
 std::vector<VertexWrapper *> poses;
 std::vector<VertexWrapper *> landmarks;
 std::vector<g2o::EdgeSE3 *> edgesPoses;
-std::vector<g2o::EdgeSE3PointXYZ *> edgesLandmarks;
+std::vector<g2o::OptimizableGraph::Edge *> edgesLandmarks;
 
 void * ids[MAX_IDS];
 
 int _starLength = 20;
-int _optimizationSteps = 100;
+int _optimizationSteps = 50;
 
 // studying impact of poses edges on optimizability
 bool _createPosesEdges = true;
@@ -301,10 +301,18 @@ int main(int argc, char ** argv){
 	isEdgePose = true;
       }
       else{
-	g2o::EdgeSE3PointXYZ * p = dynamic_cast<g2o::EdgeSE3PointXYZ *>(e);
+	g2o::OptimizableGraph::Edge * p = dynamic_cast<g2o::EdgeSE3PointXYZ *>(e);
 	if(p==NULL){
-	  // don't load this edge
-	  continue;
+	  p = dynamic_cast<g2o::EdgeSE3PointXYZDisparity *>(e);
+	  
+	  if(p==NULL){
+	    p = dynamic_cast<g2o::EdgeSE3PointXYZDepth *>(e);
+	    if(p==NULL){
+	    
+	      // don't load this edge
+	      continue;
+	    }
+	  }
 	}
       }
     }
@@ -317,7 +325,7 @@ int main(int argc, char ** argv){
       	  return 3;
       	}
 	if(!isEdgePose){
-	  prev->edges.push_back((g2o::EdgeSE3PointXYZ *)e);
+	  prev->edges.push_back((g2o::OptimizableGraph::Edge *)e);
 	}
       }
       else{
@@ -325,7 +333,7 @@ int main(int argc, char ** argv){
 	vw->vertex = (g2o::OptimizableGraph::Vertex *) v;
       	ids[v->id()] = vw;
 	if(!isEdgePose){
-	  vw->edges.push_back((g2o::EdgeSE3PointXYZ *) e);
+	  vw->edges.push_back((g2o::OptimizableGraph::Edge *) e);
 	}
 	g2o::VertexSE3 * p = dynamic_cast<g2o::VertexSE3 *>(v);
 	if(p!=NULL){
@@ -340,7 +348,7 @@ int main(int argc, char ** argv){
     }
     
     if(isEdgePose) edgesPoses.push_back((g2o::EdgeSE3 *)e);
-    else edgesLandmarks.push_back((g2o::EdgeSE3PointXYZ *)e);
+    else edgesLandmarks.push_back((g2o::OptimizableGraph::Edge *)e);
   }
   
   std::cout << "poses.size() = " << poses.size() << std::endl;
@@ -575,7 +583,6 @@ int main(int argc, char ** argv){
     
   }
   
-  //std::cout << "created " << num_edgesxy << " binary edges and " << num_triedges << " tri-edges" << std::endl;
   
   std::cout << "generating file few.g2o...";
   

@@ -36,7 +36,7 @@ int _optimizationSteps = 100;
 bool _createPosesEdges = true;
 
 // clustering stuff
-bool _clusterize = false; // if false, no clusters are made and ONLY BINARY EDGES ARE CREATED
+bool _clusterize = true; // if false, no clusters are made and ONLY BINARY EDGES ARE CREATED
 int _max_clusters = 6;
 int _max_landmarks_per_edge = 5; // set lesser than 1 to let the edge be as big as it wants
 
