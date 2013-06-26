@@ -1,4 +1,6 @@
 #include <iostream>
+#include <string>
+#include <stdlib.h> // atoi
 
 #include "FileReader.cpp"
 #include "common.h"
@@ -29,21 +31,54 @@ std::vector<g2o::OptimizableGraph::Edge *> edgesLandmarks;
 
 void * ids[MAX_IDS];
 
-int _starLength = 100;
-int _optimizationSteps = 100;
+int _starLength;
+int _optimizationSteps;
 
 // studying impact of poses edges on optimizability
-bool _createPosesEdges = true;
+bool _createPosesEdges;
 
 // clustering stuff
-bool _clusterize = true; // if false, no clusters are made and ONLY BINARY EDGES ARE CREATED
-int _max_clusters = 6;
-int _max_landmarks_per_edge = 5; // set lesser than 1 to let the edge be as big as it wants
+bool _clusterize; // if false, no clusters are made and ONLY BINARY EDGES ARE CREATED
+int _max_clusters;
+int _max_landmarks_per_edge; // set lesser than 1 to let the edge be as big as it wants
 
-// clusterizes the edges set in the given star and creates edges according to these clusters
-void computeSharedEdges(Star2D * s){
-  // look for shared xy points
-  std::vector<VertexWrapper *> shared;
+
+
+int makeClusters(std::vector<VertexWrapper *> &vertices, int * labels){
+  // check special cases
+  if(vertices.size() < 1) return 0;
+  
+  if(vertices.size()<2){
+    labels[0] = 0;
+    return 1;
+  }
+  
+  if(!_clusterize){
+    for(unsigned int i=0; i<vertices.size(); i++){
+      labels[i] = 0;
+    }
+    return 1;
+  }
+  
+  double values[2*vertices.size()];
+  double * means = (double *) malloc(sizeof(double));
+  
+  for(unsigned int i=0; i<vertices.size(); i++){
+    g2o::VertexPointXY * l = (g2o::VertexPointXY *) vertices[i]->vertex;
+    unsigned int index = i*2;
+    Eigen::Vector2d est = l->estimate();
+    values[index] = est[0];
+    values[index + 1] = est[1];
+  }
+  
+  int clusters = findClusters(values, 2, labels, &means, vertices.size(), _max_clusters);
+  return clusters;
+}
+
+
+
+void getSharedEdges(Star2D * s, std::vector<VertexWrapper *> &shared){
+  // look for shared xyz points
   for(unsigned int i=0; i<s->landmarks.size(); i++){
     VertexWrapper * l = s->landmarks[i];
     for(unsigned int e=0; e<l->edges.size(); e++){
@@ -55,39 +90,12 @@ void computeSharedEdges(Star2D * s){
     }
   }
   std::cout << "shared XY: " << shared.size() << std::endl;
-  
-  // now, shared contains all the vertexwrappers that wrap landmarks that are shared with other stars
-  
-  // let's clusterize these landmarks
-  
-  double values[2*shared.size()];
-  double * means = (double *) malloc(sizeof(double));
-    
-  for(unsigned int i=0; i<shared.size(); i++){
-    g2o::VertexPointXY * l = (g2o::VertexPointXY *) shared[i]->vertex;
-    unsigned int index = i*2;
-    Eigen::Vector2d est = l->estimate();
-    values[index] = est[0];
-    values[index + 1] = est[1];
-  }
-  
-  if(shared.size() < 1) return;
-  
-  if(shared.size() < 2){
-    g2o::EdgeSE2LotsOfXY * edge = new g2o::EdgeSE2LotsOfXY();
-    edge->setSize(2);
-    edge->vertices()[0] = s->poses[s->gauge_index]->vertex;
-    edge->vertices()[0] = shared[0]->vertex;
-    s->edgesShared.insert(edge);
-    return;
-  }
-  
-  int labels[shared.size()];
-  
-  int clusters = findClusters(values, 2, labels, &means, shared.size(), _max_clusters);
-  
-  std::cout << "found " << clusters << " clusters" << std::endl;
-  
+}
+
+
+
+// 
+void insertSharedEdges(Star2D * s, std::vector<VertexWrapper *> &shared, int clusters, int * labels){
   for(unsigned int c=0; c<clusters; c++){
     std::vector<VertexWrapper *> to;
     for(unsigned int i=0; i<shared.size(); i++){
@@ -127,68 +135,11 @@ void computeSharedEdges(Star2D * s){
       }
     }
   }
-  
-  
-}
-
-
-void computeBinarySharedEdges(Star2D * s){
-  // look for shared xyz points
-  std::vector<VertexWrapper *> shared;
-  for(unsigned int i=0; i<s->landmarks.size(); i++){
-    VertexWrapper * l = s->landmarks[i];
-    for(unsigned int e=0; e<l->edges.size(); e++){
-      g2o::HyperGraph::Vertex * p =  l->edges[e]->vertices()[0];
-      if(!s->contains(p)){
-	shared.push_back(l);
-	break;
-      }
-    }
-  }
-  std::cout << "shared XY: " << shared.size() << std::endl;
-  
-  // now, shared contains all the vertexwrappers that wrap landmarks that are shared with other stars
-  
-  for(unsigned int i=0; i<shared.size(); i++){
-    g2o::EdgeSE2LotsOfXY * e = new g2o::EdgeSE2LotsOfXY();
-    e->setSize(2);
-    e->vertices()[0] = s->poses[s->gauge_index]->vertex;
-    e->vertices()[1] = shared[i]->vertex;
-    s->edgesShared.insert(e);
-  }
 }
 
 
 
-void computeCondensedEdges(Star2D * s){
-  
-  if(s->landmarks.size() < 1) return;
-  
-  if(s->landmarks.size() == 1){
-    g2o::EdgeSE2LotsOfXY * edge = new g2o::EdgeSE2LotsOfXY();
-    edge->setSize(2);
-    edge->vertices()[0] = s->poses[s->gauge_index]->vertex;
-    edge->vertices()[1] = s->landmarks[0]->vertex;
-    s->edgesCondensed.insert(edge);
-    return;
-  }
-  
-  
-  double values[s->landmarks.size()*2];
-  double * means = (double *) malloc(sizeof(double));
-  // populate the values array
-  for(unsigned int i=0; i<s->landmarks.size(); i++){
-    g2o::VertexPointXY * l = (g2o::VertexPointXY *) s->landmarks[i]->vertex;
-    unsigned int index = i*2;
-    Eigen::Vector2d est = l->estimate();
-    values[index] = est[0];
-    values[index+1] = est[1];
-  }
-  int labels[s->landmarks.size()];
-    
-  int clusters = findClusters(values, 2, labels, &means, s->landmarks.size(), _max_clusters);
-  std::cout << "found " << clusters << " clusters" << std::endl;
-  
+void insertCondensedEdges(Star2D * s, int clusters, int * labels){
   for(unsigned int c=0; c<clusters; c++){
     std::vector<VertexWrapper *> to;
     for(unsigned int i=0; i<s->landmarks.size(); i++){
@@ -232,24 +183,79 @@ void computeCondensedEdges(Star2D * s){
 
 
 
-void computeBinaryCondensedEdges(Star2D * s){
-  // now, shared contains all the vertexwrappers that wrap landmarks that are shared with other stars
-  
-  for(unsigned int i=0; i<s->landmarks.size(); i++){
-    g2o::EdgeSE2LotsOfXY * e = new g2o::EdgeSE2LotsOfXY();
-    e->setSize(2);
-    e->vertices()[0] = s->poses[s->gauge_index]->vertex;
-    e->vertices()[1] = s->landmarks[i]->vertex;
-    s->edgesCondensed.insert(e);
-  }
-}
-
-
-
-
-void init(){
+void init(int argc, char** argv){
   for(unsigned int i=0; i<MAX_IDS; i++){
     ids[i] = 0;
+  }
+  
+  // initialize options
+  _starLength = 70;
+  _optimizationSteps = 100;
+  _createPosesEdges = true;
+  _clusterize = true;
+  _max_clusters = 6;
+  _max_landmarks_per_edge = 5;
+  
+  // check options from command line
+  for(unsigned int i=2; i<argc; i++){
+    std::string option(argv[i]);
+    
+    bool known = false;
+    
+    if(option.compare("-os") == 0){
+      known = true;
+      i++;
+      if(i == argc){
+	std::cerr << "ERROR: no value specified for option " << option << std::endl;
+	exit(1);
+      }
+      _optimizationSteps = atoi(argv[i]);
+    }
+    
+    else if(option.compare("-sl") == 0){
+      known = true;
+      i++;
+      if(i == argc){
+	std::cerr << "ERROR: no value specified for option " << option << std::endl;
+	exit(1);
+      }
+      _starLength = atoi(argv[i]);
+    }
+    
+    else if(option.compare("-nopos") == 0){
+      known = true;
+      _createPosesEdges = false;
+    }
+    
+    else if(option.compare("-noclust") == 0){
+      known = true;
+      _clusterize = false;
+    }
+    
+    else if(option.compare("-mc") == 0){
+      known = true;
+      i++;
+      if(i == argc){
+	std::cerr << "ERROR: no value specified for option " << option << std::endl;
+	exit(1);
+      }
+      _max_clusters = atoi(argv[i]);
+    }
+    
+    else if(option.compare("-ml") == 0){
+      known = true;
+      i++;
+      if(i == argc){
+	std::cerr << "ERROR: no value specified for option " << option << std::endl;
+	exit(1);
+      }
+      _max_landmarks_per_edge = atoi(argv[i]);
+    }
+    
+    if(!known){
+      std::cerr << "ERROR: unknown command: " << option << std::endl;
+      exit(1);
+    }
   }
 }
 
@@ -259,10 +265,26 @@ int main(int argc, char ** argv){
   
   // check args
   if(argc<2){
-    std::cout << "Usage: condense <input_file.g2o>" << std::endl;
+    std::cout << "Usage: condense <input_file.g2o> <options>" << std::endl;
+    std::cout << "\toptions:" << std::endl;
+    std::cout << "\t-os N\tsets the optimization steps for the local maps to N" << std::endl;
+    std::cout << "\t-sl N\tsets the length of the stars to N steps" << std::endl;
+    std::cout << "\t-nopos\tinhibits the creation of pose-pose edges" << std::endl;
+    std::cout << "\t-noclust\t doesn't clusterize the landmarks" << std::endl;
+    std::cout << "\t-mc N\tsets the maximum number of clusters to N" << std::endl;
+    std::cout << "\t-ml N\t sets the maximum number of landmarks per edge to N" << std::endl;
+    
     return 0;
   }
   
+  init(argc,argv);
+  
+  std::cout << "INFO: _starLength = " << _starLength << std::endl;
+  std::cout << "INFO: _optimizationSteps = " << _optimizationSteps << std::endl;
+  std::cout << "INFO: _createPosesEdges = " << _createPosesEdges << std::endl;
+  std::cout << "INFO: _clusterize = " << _clusterize << std::endl;
+  std::cout << "INFO: _max_clusters = " << _max_clusters << std::endl;
+  std::cout << "INFO: _max_landmarks_per_edge = " << _max_landmarks_per_edge << std::endl;
   
   // allocate the optimizer
   g2o::SparseOptimizer * optimizer = new g2o::SparseOptimizer();
@@ -414,8 +436,10 @@ int main(int argc, char ** argv){
   unsigned int inserted = 0;
   for(unsigned int i=0; i<poses.size(); i++){
     if(inserted==0){
+      if(i>0){
+	s->gauge_index = (s->poses.size()/2);
+      }
       s = new Star2D();
-      s->gauge_index = (_starLength/2);
       stars.push_back(s);
     }
     
@@ -459,16 +483,10 @@ int main(int argc, char ** argv){
     std::cout << "landmarks: " << s->landmarks.size() << std::endl;
     
     // push all the estimates
-    for(unsigned int i=0; i<s->poses.size(); i++){
-      s->poses[i]->vertex->push();
-    }
-    for(unsigned int i=0; i<s->landmarks.size(); i++){
-      s->landmarks[i]->vertex->push();
-    }
-    
+    s->pushState();
     // fix the gauge
-    s->poses[s->gauge_index]->vertex->setFixed(true);
-	 
+    s->fixGauge();
+    
     // ready to move stuff
     
     // optimize the local map
@@ -483,25 +501,26 @@ int main(int argc, char ** argv){
     }
     optimizer->initializeOptimization(toOptimize);
     int optim_result = optimizer->optimize(_optimizationSteps);
-    if(optim_result<1){
-      std::cout << "!!! optimization failed !!!" <<std::endl;
-      // don't label according to the optimized graph.
+    // if(optim_result<1){
+    //   std::cout << "!!! optimization failed !!!" <<std::endl;
+    //   // don't label according to the optimized graph.
       
-      // go back to the unoptimized state
-      // pop all the estimates
-      for(unsigned int i=0; i<s->poses.size(); i++){
-  	s->poses[i]->vertex->pop();
-      }
-      for(unsigned int i=0; i<s->landmarks.size(); i++){
-  	s->landmarks[i]->vertex->pop();
-      }
+    //   // go back to the unoptimized state
+    //   // pop all the estimates
+    //   for(unsigned int i=0; i<s->poses.size(); i++){
+    // 	s->poses[i]->vertex->pop();
+    //   }
+    //   for(unsigned int i=0; i<s->landmarks.size(); i++){
+    // 	s->landmarks[i]->vertex->pop();
+    //   }
       
-      // unfix the gauge
-      s->poses[s->gauge_index]->vertex->setFixed(false);
+    //   // unfix the gauge
+    //   s->poses[s->gauge_index]->vertex->setFixed(false);
       
-      continue;
+    //   continue;
       
-    }
+    // }
+
     
     // shared variables:
     // the first and the last pose are always shared (except for the first and the last star)
@@ -519,64 +538,64 @@ int main(int argc, char ** argv){
 	s->edgesShared.insert(edge);
       }
     }
-
-    if(_clusterize){
-      std::cout << "clustering shared landmarks..." <<std::endl;
-      computeSharedEdges(s);
-    }
     
-    else{
-      std::cout << "computing binary edges to the shared landmarks" << std::endl;
-      computeBinarySharedEdges(s);
+    if(optim_result > 0){
+      std::cout << "looking for shared variables" << std::endl;
+      std::vector<VertexWrapper *> shared;
+      getSharedEdges(s, shared);
+      
+      if(shared.size() > 0){
+	std::cout << "clustering shared landmarks..." <<std::endl;
+	int labels[shared.size()];
+	int clusters = makeClusters(shared, labels);
+	
+	std::cout << "found " << clusters << " clusters" << std::endl;
+	
+	insertSharedEdges(s, shared, clusters, labels);
+      }
     }
     
     std::cout << "labelling edges to shared variables" << std::endl;
     labeler.labelEdges(s->edgesShared);
     
     
-    
     // create condensed measurements for the local variables
+    std::cout << "creating condensed edges to star poses" << std::endl;
     if(_createPosesEdges){
       for(unsigned int i=0; i<s->poses.size(); i++){
-      
+	
 	if(i==s->gauge_index) continue;
-      
+	
 	g2o::EdgeSE2 * edge = new g2o::EdgeSE2();
 	
 	edge->vertices()[0] = s->poses[s->gauge_index]->vertex;
 	edge->vertices()[1] = s->poses[i]->vertex;
 	
-      
+	
 	s->edgesCondensed.insert(edge);
       }
     }
     
-    if(_clusterize){
-      std::cout << "clustering all the landmarks..." <<std::endl;
-      computeCondensedEdges(s);
-    }
-    else{
-      std::cout << "computing binary edges to all the local landmarks" << std::endl;
-      computeBinaryCondensedEdges(s);
+    if(optim_result > 0){
+      if(s->landmarks.size() > 0){
+	std::cout << "clustering all the landmarks..." <<std::endl;
+	int labels[s->landmarks.size()];
+	int clusters = makeClusters(s->landmarks, labels);
+	
+	std::cout << "found " << clusters << " clusters" << std::endl;
+	
+	insertCondensedEdges(s, clusters, labels);
+      }
     }
     
-    std::cout << "labelling condensed edges to the local variables" << std::endl;
+    std::cout << "labelling condensed edges to all the local variables" << std::endl;
     labeler.labelEdges(s->edgesCondensed);
     
-    // pop all the estimates
-    for(unsigned int i=0; i<s->poses.size(); i++){
-      s->poses[i]->vertex->pop();
-    }
-    for(unsigned int i=0; i<s->landmarks.size(); i++){
-      s->landmarks[i]->vertex->pop();
-    }
-    
-    // unfix the gauge
-    s->poses[s->gauge_index]->vertex->setFixed(false);
+    s->popState();
+    s->unfixGauge();
     
   }
   
-  //std::cout << "created " << num_edgesxy << " binary edges and " << num_triedges << " tri-edges" << std::endl;
   
   std::cout << "generating file few.g2o...";
   

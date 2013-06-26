@@ -33,6 +33,35 @@ struct Star2D{
   
   Star2D(){gauge_index = 0;};
   
+  void pushState(){
+    for(unsigned int i=0; i<this->poses.size(); i++){
+      this->poses[i]->vertex->push();
+    }
+    for(unsigned int i=0; i<this->landmarks.size(); i++){
+      this->landmarks[i]->vertex->push();
+    }
+  }
+  
+  void popState(){
+    // pop all the estimates
+    for(unsigned int i=0; i<this->poses.size(); i++){
+      this->poses[i]->vertex->pop();
+    }
+    for(unsigned int i=0; i<this->landmarks.size(); i++){
+      this->landmarks[i]->vertex->pop();
+    }
+  }
+  
+  void fixGauge(){ 
+    // fix the gauge
+    this->poses[this->gauge_index]->vertex->setFixed(true);
+  }
+  
+  void unfixGauge(){
+    // free the gauge
+    this->poses[this->gauge_index]->vertex->setFixed(false);
+  }
+
   bool contains(VertexWrapper * v){
     for(unsigned int i=0; i<landmarks.size(); i++){
       if(landmarks[i]->vertex->id() == v->vertex->id()) return true;

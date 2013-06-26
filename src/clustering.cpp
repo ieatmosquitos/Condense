@@ -13,6 +13,7 @@ template<typename T> T absolute(T a){
 // inputs:	• v - array containing the values
 // 		• R - dimension
 //		• label - array where labels will be put
+//		• means - means will be put here. This is supposed to be an array of dimension R*K
 //		• N - the number of samples
 //		• K - the number of clusters to generate
 // NOTE ON THE INPUT:	the values are supposed to be on a single array, the R parameter will specify the size of each sample.
