@@ -17,9 +17,6 @@ link_directories( $ENV{G2O_ROOT}/lib )
 FIND_PACKAGE(Eigen  REQUIRED)
 include_directories(${EIGEN_INCLUDE_DIRS})
 
-find_package(SFML 1.6 COMPONENTS system window graphics network audio REQUIRED)
-include_directories(${SFML_INCLUDE_DIR})
-
 add_executable( condense src/condense.cpp src/edge_labeler.cpp)
 #add_executable( multicondense src/multicondense.cpp src/edge_labeler.cpp)
 #add_executable( visualize src/visualizer.cpp src/drawer.cpp )
