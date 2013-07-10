@@ -1,0 +1,16 @@
+#include <vector>
+#include "Eigen"
+
+#ifndef _STABILITY_H
+#define _STABILITY_H
+
+
+class linSystem{
+  std::vector<double> a;
+  std::vector<double> b;
+  std::vector<double> c;
+};
+
+
+
+#endif // _STABILITY_H

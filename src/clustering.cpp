@@ -33,19 +33,68 @@ bool Kmeans(double * v, unsigned int R, int * label, double * means, unsigned in
     int chosen[K];
     
     
-    for(unsigned int i=0; i<K; i++){
-      chosen[i] = -1;
-      
-      while(chosen[i] == -1){
-	chosen[i] = rand()%N;
-	// check if it has already been chosen
-	
-	for(unsigned int j=0; j<i; j++){
-	  if(chosen[j] == chosen[i]){
-	    chosen[i] = -1;
-	  }
+    // choose wisely: choose points that maximize the mutual distance
+    // first choose one with the biggest/smallest value on one of the dimensions
+    double mins[R];
+    int mins_ind[R];
+    double maxs[R];
+    int maxs_ind[R];
+    for(unsigned int r=0; r<R; r++){
+      mins[r] = v[r];
+      mins_ind[r] = 0;
+      maxs[r] = v[r];
+      maxs_ind[r] = 0;
+    }
+    for(unsigned int n=1; n<N; n++){
+      unsigned int index = n*R;
+      for(unsigned int r=0; r<R; r++){
+	if(v[index+r] < mins[r]){
+	  mins[r] = v[index+r];
+	  mins_ind[r] = n;
+	}
+	else if(v[index+r] > maxs[r]){
+	  maxs[r] = v[index+r];
+	  maxs_ind[r] = n;
 	}
       }
+    }
+    if(rand()%2){
+      int rnd = rand();
+      chosen[0] = mins_ind[rnd%R];
+    }
+    else{
+      int rnd = rand();
+      chosen[0] = maxs_ind[rnd%R];
+    }
+    int m0_index = chosen[0]*R;
+    for(unsigned int r=0; r<R; r++){
+      means[r] = v[m0_index+r];
+    }
+    
+    for(unsigned int i=1; i<K; i++){
+      chosen[i] = -1;
+      
+      double max_dist=0;
+      unsigned int m = 0;	// index (out of N) of the point that maximizes the distance from the already setted means.
+      
+      for(unsigned int n=0; n<N; n++){
+	unsigned int index = n*R;
+	double distance = 0;
+	for(unsigned int j=0; j<i; j++){ // for each of the already computed means
+	  unsigned int mindex = j*R;
+	  for(unsigned int r=0; r<R; r++){
+	    distance += pow(means[mindex+r] - v[index+r],2);
+	  }
+	}
+	// distance = sqrt(distance)/i; // not needed,   x > g ---> f(x) > f(g)
+	if(distance > max_dist){
+	  max_dist = distance;
+	  m = n;
+	}
+	
+      }
+      
+      chosen[i] = m;
       
       int index = chosen[i]*R;
       for(unsigned int r=0; r<R; r++){

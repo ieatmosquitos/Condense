@@ -1,17 +1,20 @@
 #include <iostream>
 #include <string>
-#include <stdlib.h> // atoi
+//#include <stdlib.h> // atoi
+#include <cstdlib> // atoi, itoa
 
 #include "FileReader.cpp"
 #include "common.h"
 #include "edge_labeler.h"
 #include "clustering.cpp"
+#include "stability.h"
 
 #include "g2o/core/sparse_optimizer.h"
 #include "g2o/core/block_solver.h"
 #include "g2o/core/factory.h"
 #include "g2o/core/optimization_algorithm_factory.h"
 #include "g2o/core/optimization_algorithm_gauss_newton.h"
+#include "g2o/core/optimization_algorithm_levenberg.h"
 #include "g2o/solvers/csparse/linear_solver_csparse.h"
 //#include "g2o/core/robust_kernel_impl.h"
 #include "g2o/types/slam2d/types_slam2d.cpp"
@@ -182,8 +185,137 @@ void insertCondensedEdges(Star2D * s, int clusters, int * labels){
 }
 
 
+void prepareOutputName(std::string original, std::string & fewout, std::string & manyout){
+  
+  fewout = "few.g2o";
+  manyout = "many.g2o";
+  
+  std::stringstream ss;
+  ss << original.substr(0,original.length()-4) << "-sl_" << _starLength << "-mc_" << _max_clusters << "-ml_" << _max_landmarks_per_edge;
+  if(!_clusterize){
+    ss << "-noclust";
+  }
+  if(!_createPosesEdges){
+    ss << "-nopos";
+  }
+  
+  std::string basename = ss.str();
+  //  std::cout << "basename = " << basename << std::endl;
+
+  fewout = basename;
+  manyout = basename;
+  
+  fewout.append("_few.g2o");
+  manyout.append("_many.g2o");
+  
+}
+
+
+// bool checkIntegrity(Star2D * s){
+//   for(unsigned int i=0; i<s->landmarks.size(); i++){
+//     VertexWrapper * vw = s->landmarks[i];
+    
+//     unsigned int count = 0;
+    
+//     for(unsigned int j=0; j<vw->edges.size(); j++){
+//       if(s->contains(vw->edges[j]->vertices()[0])){
+// 	count++;
+//       }
+//     }
+    
+//     if(count<1) return false;
+//   }
+//   return true;
+// }
+
+
+void purgeLonelyLandmarks(Star2D * s){
+  
+  for(unsigned int l=0; l<s->landmarks.size(); l++){
+    VertexWrapper * v = s->landmarks[l];
+    
+    // count how many poses see this landmark within the same star
+    unsigned int count=0;
+    bool isBearing = false;
+    bool areAllBearings = true;
+     
+    for(unsigned int i = 0; i<v->edges.size(); i++){
+      
+      g2o::OptimizableGraph::Edge * e = v->edges[i];
+      
+      if(s->contains(e->vertices()[0])){
+ 	count++;
+ 	g2o::EdgeSE2PointXYBearing * b = dynamic_cast<g2o::EdgeSE2PointXYBearing *>(e);
+ 	if(b!=NULL){
+ 	  isBearing = true;
+ 	}
+	else{
+	  areAllBearings = false;
+	}
+      }
+    }
+    
+    bool remove_it = false;
+     
+    // std::cout << "landmark " << v->vertex->id() << " has " << v->edges.size() << " edges" << std::endl;
+    // std::cout << "seen by " << count << " poses inside the star" << std::endl;
+    if(count < 1){
+      std::cerr << "implementation is bugged! check the purgeLonelyLandmarks() function" << std::endl;
+      exit(11);
+    }
+     
+    if(count < 2 && isBearing){
+      remove_it = true;
+    }
+    else{ // check if the point is stable enough
+      
+      if(areAllBearings){
+	// build a linear system gathering the informations from the bearings measured from the poses
+	
+	linSystem linsys;
+	for(unsigned int i = 0; i<v->edges.size(); i++){
+      	  g2o::OptimizableGraph::Edge * e = v->edges[i];
+	  if(s->contains(e->vertices()[0])){
+	    g2o::VertexSE2 * pose = dynamic_cast<g2o::VertexSE2 *>(e->vertices()[0]);
+	    if(!pose){
+	      std::cerr << "watch out! the code is bugged. Look for this sentence in condense.cpp" << std::endl;
+	      exit(20);
+	    }
+	    
+	    g2o::EdgeSE2PointXYBearing * b = (g2o::EdgeSE2PointXYBearing *) e;
+	    linsys.addConstraint(pose->estimate()[0], pose->estimate()[1], pose->estimate()[2], b->measurement());
+	  }
+	  
+      	}
+	
+	if(!linsys.checkStability()){
+	  remove_it = true;
+	}
+	 
+      }
+    }
+     
+    if(remove_it){
+      // should remove this landmark from the star
+       
+      // search the edge in the star that leads to this landmark
+      for(unsigned int i=0; i<s->edgesLandmarks.size(); i++){
+    	if(s->edgesLandmarks[i]->vertices()[1] == v->vertex){
+    	  s->edgesLandmarks.erase(s->edgesLandmarks.begin()+i);
+    	  i--;
+    	}
+      }
+       
+      s->landmarks.erase(s->landmarks.begin()+l);
+      l--;
+       
+    }
+  }
+}
+
 
 void init(int argc, char** argv){
+  
   for(unsigned int i=0; i<MAX_IDS; i++){
     ids[i] = 0;
   }
@@ -291,10 +423,11 @@ int main(int argc, char ** argv){
   SlamLinearSolver* linearSolver = new SlamLinearSolver();
   linearSolver->setBlockOrdering(false);
   SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
-  g2o::OptimizationAlgorithmGaussNewton* solver = new g2o::OptimizationAlgorithmGaussNewton(blockSolver);
+  // g2o::OptimizationAlgorithmGaussNewton * solver = new g2o::OptimizationAlgorithmGaussNewton(blockSolver);
+  g2o::OptimizationAlgorithmLevenberg * solver = new g2o::OptimizationAlgorithmLevenberg(blockSolver);
   
   optimizer->setAlgorithm(solver);
-  
+  blockSolver->setOptimizer(optimizer);
   
   // load the graph
   std::ifstream ifs(argv[1]);
@@ -308,6 +441,14 @@ int main(int argc, char ** argv){
   }
   std::cout << "Loaded " << optimizer->vertices().size() << " vertices" << std::endl;
   std::cout << "Loaded " << optimizer->edges().size() << " edges" << std::endl;
+  
+  
+  optimizer->initializeOptimization();
+  optimizer->computeActiveErrors();
+  
+  std::cout << "Initial chi2 = " << optimizer->activeChi2() << std::endl;
+  
+  optimizer->computeInitialGuess();
   
   
   // populate the structures
@@ -428,8 +569,8 @@ int main(int argc, char ** argv){
     prev = id;
   }
   
-
-
+  // optimizer->computeInitialGuess();
+  
   // start to generate the stars
   std::vector<Star2D *> stars;
   Star2D * s;
@@ -437,6 +578,7 @@ int main(int argc, char ** argv){
   for(unsigned int i=0; i<poses.size(); i++){
     if(inserted==0){
       if(i>0){
+	purgeLonelyLandmarks(s);
 	s->gauge_index = (s->poses.size()/2);
       }
       s = new Star2D();
@@ -450,6 +592,7 @@ int main(int argc, char ** argv){
     VertexWrapper * p = poses[i];
     s->poses.push_back(p);
     s->edgesPoses.push_back(edgesPoses[i]);
+    
     inserted = (inserted+1) % _starLength;
     
     for(unsigned int e=0; e<p->edges.size(); e++){
@@ -460,16 +603,21 @@ int main(int argc, char ** argv){
 	vw = findWrapper(landmarks, l);
 	if(!vw){
 	  std::cerr << "NNNNNNOOOOOOOOOOOOOO!" << std::endl;
+	  exit(12);
 	}
-	else{
-	  s->landmarks.push_back(vw);
-	}
+	
+	s->landmarks.push_back(vw);
+	
       }
       s->edgesLandmarks.push_back(p->edges[e]);
     }
     
   }
+  purgeLonelyLandmarks(stars[stars.size()-1]);
+  
   std::cout << "generated " << stars.size() << " stars" << std::endl;
+  
+  //  return 0;
   
   g2o::EdgeLabeler labeler(optimizer);
   
@@ -488,6 +636,16 @@ int main(int argc, char ** argv){
     s->fixGauge();
     
     // ready to move stuff
+    
+    // move landmarks according to a guess from the edges
+    for(unsigned int i=0;i<s->edgesLandmarks.size(); i++){
+      g2o::EdgeSE2PointXYBearing * e = dynamic_cast<g2o::EdgeSE2PointXYBearing *>(s->edgesLandmarks[i]);
+      if(e!=NULL){
+	g2o::OptimizableGraph::VertexSet fixed;
+	fixed.insert(e->vertices()[0]);
+	e->initialEstimate(fixed, (g2o::OptimizableGraph::Vertex *)e->vertices()[1]);
+      }
+    }
     
     // optimize the local map
     std::cout << "optimizing the local map..." << std::endl;
@@ -550,6 +708,11 @@ int main(int argc, char ** argv){
 	int clusters = makeClusters(shared, labels);
 	
 	std::cout << "found " << clusters << " clusters" << std::endl;
+	// std::cout << "labels: [";
+	// for(unsigned int i=0; i<shared.size(); i++){
+	//   std::cout << " " << labels[i];
+	// }
+	// std::cout << " ]" << std::endl;
 	
 	insertSharedEdges(s, shared, clusters, labels);
       }
@@ -597,7 +760,11 @@ int main(int argc, char ** argv){
   }
   
   
-  std::cout << "generating file few.g2o...";
+  std::string fewname = "questo_no";
+  std::string manyname = "questo_no";
+  prepareOutputName(std::string(argv[1]), fewname, manyname);
+  
+  std::cout << "generating file " << fewname << "...";
   
   for(unsigned int i=0; i<stars.size(); i++){
     Star2D * s = stars[i];
@@ -608,12 +775,12 @@ int main(int argc, char ** argv){
     }
   }
   
-  std::ofstream ofs1("few.g2o");
+  std::ofstream ofs1(fewname.c_str());
   optimizer->save(ofs1, FEW_LEVEL);
   
   std::cout << "\tDONE" << std::endl;
   
-  std::cout << "generating file many.g2o...";
+  std::cout << "generating file " << manyname << "...";
   
   for(unsigned int i=0; i<stars.size(); i++){
     Star2D * s = stars[i];
@@ -624,7 +791,7 @@ int main(int argc, char ** argv){
     }
   }
   
-  std::ofstream ofs2("many.g2o");
+  std::ofstream ofs2(manyname.c_str());
   optimizer->save(ofs2, MANY_LEVEL);
   
   std::cout << "\tDONE" << std::endl;

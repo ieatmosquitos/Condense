@@ -14,6 +14,18 @@ typedef g2o::BlockSolver< g2o::BlockSolverTraits<-1, -1> >  SlamBlockSolver;
 typedef g2o::LinearSolverCSparse<SlamBlockSolver::PoseMatrixType> SlamLinearSolver;
 
 
+std::string computeOutputName(std::string input_name){
+  std::string name = input_name;
+  if(name.substr(name.length()-4, name.length()).compare(".g2o") == 0 ){
+    name = name.substr(0, name.length()-4); 
+  }
+  
+  name.append("_tozero.g2o");
+  
+  return name;
+}
+
+
 int main(int argc, char ** argv){
   if(argc < 2){
     std::cout << "Usage: compare <file1.g2o>" << std::endl;
@@ -52,8 +64,10 @@ int main(int argc, char ** argv){
     
   }
   
-  std::ofstream ofs("tozero.g2o");
+  std::string outname = computeOutputName(std::string(argv[1]));
+  
+  std::ofstream ofs(outname.c_str());
   optimizer->save(ofs);
   
-  std::cout << "output saved to 'tozero.g2o'" << std::endl;
+  std::cout << "output saved to '" << outname << "'" << std::endl;
 }

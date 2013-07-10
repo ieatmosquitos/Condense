@@ -12,6 +12,7 @@
 #include "g2o/core/factory.h"
 #include "g2o/core/optimization_algorithm_factory.h"
 #include "g2o/core/optimization_algorithm_gauss_newton.h"
+#include "g2o/core/optimization_algorithm_levenberg.h"
 #include "g2o/solvers/csparse/linear_solver_csparse.h"
 //#include "g2o/core/robust_kernel_impl.h"
 #include "g2o/types/slam3d/types_slam3d.cpp"
@@ -183,6 +184,49 @@ void insertCondensedEdges(Star3D * s, int clusters, int * labels){
 }
 
 
+void prepareOutputName(std::string original, std::string & fewout, std::string & manyout){
+  
+  fewout = "few.g2o";
+  manyout = "many.g2o";
+  
+  std::stringstream ss;
+  ss << original.substr(0,original.length()-4) << "-sl_" << _starLength << "-mc_" << _max_clusters << "-ml_" << _max_landmarks_per_edge;
+  if(!_clusterize){
+    ss << "-noclust";
+  }
+  if(!_createPosesEdges){
+    ss << "-nopos";
+  }
+  
+  std::string basename = ss.str();
+  //  std::cout << "basename = " << basename << std::endl;
+
+  fewout = basename;
+  manyout = basename;
+  
+  fewout.append("_few.g2o");
+  manyout.append("_many.g2o");
+  
+}
+
+
+bool checkIntegrity(Star3D * s){
+  for(unsigned int i=0; i<s->landmarks.size(); i++){
+    VertexWrapper * vw = s->landmarks[i];
+    
+    unsigned int count = 0;
+    
+    for(unsigned int j=0; j<vw->edges.size(); j++){
+      if(s->contains(vw->edges[j]->vertices()[0])){
+	count++;
+      }
+    }
+    
+    if(count<1) return false;
+  }
+  return true;
+}
+
 
 void init(int argc, char** argv){
   for(unsigned int i=0; i<MAX_IDS; i++){
@@ -293,6 +337,7 @@ int main(int argc, char ** argv){
   linearSolver->setBlockOrdering(false);
   SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
   g2o::OptimizationAlgorithmGaussNewton* solver = new g2o::OptimizationAlgorithmGaussNewton(blockSolver);
+  //g2o::OptimizationAlgorithmLevenberg * solver = new g2o::OptimizationAlgorithmLevenberg(blockSolver);
   
   optimizer->setAlgorithm(solver);
   
@@ -310,6 +355,12 @@ int main(int argc, char ** argv){
   std::cout << "Loaded " << optimizer->vertices().size() << " vertices" << std::endl;
   std::cout << "Loaded " << optimizer->edges().size() << " edges" << std::endl;
   
+  optimizer->initializeOptimization();
+  optimizer->computeActiveErrors();
+  
+  std::cout << "Initial chi2 = " << optimizer->activeChi2() << std::endl;
+  
+  optimizer->computeInitialGuess();
   
   // populate the structures
   for(g2o::HyperGraph::EdgeSet::iterator it=optimizer->edges().begin(); it!=optimizer->edges().end(); it++){
@@ -443,6 +494,10 @@ int main(int argc, char ** argv){
   for(unsigned int i=0; i<poses.size(); i++){
     if(inserted==0){
       if(i>0){
+	if (!checkIntegrity(s)){
+	  std::cerr << "THESE STARS MAKE ME MAD!" << std::endl;
+	  exit(13);
+	}
 	s->gauge_index = (s->poses.size()/2);
       }
       s = new Star3D();
@@ -475,6 +530,10 @@ int main(int argc, char ** argv){
     }
     
   }
+  if (!checkIntegrity(stars[stars.size()-1])){
+     std::cerr << "THESE STARS MAKE ME MAD!" << std::endl;
+     exit(13);
+  };
   std::cout << "generated " << stars.size() << " stars" << std::endl;
   
   g2o::EdgeLabeler labeler(optimizer);
@@ -506,6 +565,7 @@ int main(int argc, char ** argv){
       toOptimize.insert(s->edgesLandmarks[i]);
     }
     optimizer->initializeOptimization(toOptimize);
+    optimizer->computeInitialGuess();
     int optim_result = optimizer->optimize(_optimizationSteps);
     // if(optim_result<1){
     //   std::cout << "!!! optimization failed !!!" <<std::endl;
@@ -603,7 +663,11 @@ int main(int argc, char ** argv){
   }
   
   
-  std::cout << "generating file few.g2o...";
+   std::string fewname = "questo_no";
+  std::string manyname = "questo_no";
+  prepareOutputName(std::string(argv[1]), fewname, manyname);
+  
+  std::cout << "generating file " << fewname << "...";
   
   for(unsigned int i=0; i<stars.size(); i++){
     Star3D * s = stars[i];
@@ -614,12 +678,12 @@ int main(int argc, char ** argv){
     }
   }
   
-  std::ofstream ofs1("few.g2o");
+  std::ofstream ofs1(fewname.c_str());
   optimizer->save(ofs1, FEW_LEVEL);
   
   std::cout << "\tDONE" << std::endl;
   
-  std::cout << "generating file many.g2o...";
+  std::cout << "generating file " << manyname << "...";
   
   for(unsigned int i=0; i<stars.size(); i++){
     Star3D * s = stars[i];
@@ -630,7 +694,7 @@ int main(int argc, char ** argv){
     }
   }
   
-  std::ofstream ofs2("many.g2o");
+  std::ofstream ofs2(manyname.c_str());
   optimizer->save(ofs2, MANY_LEVEL);
   
   std::cout << "\tDONE" << std::endl;
