@@ -492,6 +492,8 @@ int main(int argc, char ** argv){
   //   edgesPoses[e_index] = tmp;
   // }
   
+  
+  std::cout << "checking edges order..." << std::endl;
   prev = -1;
   for(unsigned int i=0; i<edgesPoses.size(); i++){
     g2o::EdgeSE3 * e = edgesPoses[i];
@@ -502,7 +504,8 @@ int main(int argc, char ** argv){
     prev = id;
   }
   
-
+  
+  std::cout << "starting to generate the stars..." << std::endl;
 
   // start to generate the stars
   std::vector<Star3D *> stars;
