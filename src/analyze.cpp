@@ -176,7 +176,7 @@ int main(int argc, char ** argv){
   
   initial_chi2 = optimizer2->activeChi2();
   
-  int optim_result = optimizer2->optimize(5);
+  int optim_result = optimizer2->optimize(10);
   
   if(!optim_result){
     optim_fail = true;

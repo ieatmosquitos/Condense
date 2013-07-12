@@ -60,7 +60,7 @@ bool linSystem::checkStability(){
     return false;
   }
   
-  if(eigenvalues(0,0) / eigenvalues(1,0) > 8){
+  if(eigenvalues(0,0) / eigenvalues(1,0) > 7){
     return false;
   }
   

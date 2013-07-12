@@ -17,7 +17,7 @@
 //#include "g2o/core/robust_kernel_impl.h"
 #include "g2o/types/slam3d/types_slam3d.cpp"
 
-#define MAX_IDS 100000
+#define MAX_IDS 300000
 #define FEW_LEVEL 2
 #define MANY_LEVEL 3
 
