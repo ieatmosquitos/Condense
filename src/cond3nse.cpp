@@ -494,10 +494,10 @@ int main(int argc, char ** argv){
   for(unsigned int i=0; i<poses.size(); i++){
     if(inserted==0){
       if(i>0){
-	if (!checkIntegrity(s)){
-	  std::cerr << "THESE STARS MAKE ME MAD!" << std::endl;
-	  exit(13);
-	}
+	// if (!checkIntegrity(s)){
+	//   std::cerr << "THESE STARS MAKE ME MAD!" << std::endl;
+	//   exit(13);
+	// }
 	s->gauge_index = (s->poses.size()/2);
       }
       s = new Star3D();
@@ -530,10 +530,10 @@ int main(int argc, char ** argv){
     }
     
   }
-  if (!checkIntegrity(stars[stars.size()-1])){
-     std::cerr << "THESE STARS MAKE ME MAD!" << std::endl;
-     exit(13);
-  };
+  // if (!checkIntegrity(stars[stars.size()-1])){
+  //    std::cerr << "THESE STARS MAKE ME MAD!" << std::endl;
+  //    exit(13);
+  // };
   std::cout << "generated " << stars.size() << " stars" << std::endl;
   
   g2o::EdgeLabeler labeler(optimizer);
