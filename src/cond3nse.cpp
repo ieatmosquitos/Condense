@@ -228,6 +228,16 @@ bool checkIntegrity(Star3D * s){
 }
 
 
+void orderLastElement(std::vector<g2o::EdgeSE3 *> &poses){
+  int index = poses.size()-1;
+  while(index > 0 && poses[index]->vertices()[0]->id() < poses[index-1]->vertices()[0]->id()){
+    g2o::EdgeSE3 * tmp = poses[index];
+    poses[index] = poses[index-1];
+    poses[index-1] = tmp;
+  }
+}
+
+
 void init(int argc, char** argv){
   for(unsigned int i=0; i<MAX_IDS; i++){
     ids[i] = 0;
@@ -419,7 +429,10 @@ int main(int argc, char ** argv){
       }  
     }
     
-    if(isEdgePose) edgesPoses.push_back((g2o::EdgeSE3 *)e);
+    if(isEdgePose){
+      edgesPoses.push_back((g2o::EdgeSE3 *)e);
+      orderLastElement(edgesPoses);
+    }
     else edgesLandmarks.push_back((g2o::OptimizableGraph::Edge *)e);
   }
   
@@ -453,30 +466,30 @@ int main(int argc, char ** argv){
   }
   
   
-  // order edgesPoses such that edge i connects pose i to pose i+1
-  std::cout << "checking edges order" << std::endl;
-  for(unsigned int i=0; i<poses.size()-1; i++){
-    VertexWrapper * from = poses[i];
-    VertexWrapper * to = poses[i+1];
+  // // order edgesPoses such that edge i connects pose i to pose i+1
+  // std::cout << "checking edges order..." << std::endl;
+  // for(unsigned int i=0; i<poses.size()-1; i++){
+  //   VertexWrapper * from = poses[i];
+  //   VertexWrapper * to = poses[i+1];
     
-    // look for the corresponding edge;
-    g2o::EdgeSE3 * edge = 0;
-    int e_index;
-    for(unsigned int j=0; j<edgesPoses.size(); j++){
-      g2o::EdgeSE3 * e = edgesPoses[j];
-      if(e->vertices()[0]->id() == from->vertex->id()  &&  e->vertices()[1]->id() == to->vertex->id()){
-	edge = e;
-	e_index = j;
-	break;
-      }
-    }
-    if(edge == 0){
-      continue;
-    }
-    g2o::EdgeSE3 * tmp = edgesPoses[i];
-    edgesPoses[i] = edge;
-    edgesPoses[e_index] = tmp;
-  }
+  //   // look for the corresponding edge;
+  //   g2o::EdgeSE3 * edge = 0;
+  //   int e_index;
+  //   for(unsigned int j=0; j<edgesPoses.size(); j++){
+  //     g2o::EdgeSE3 * e = edgesPoses[j];
+  //     if(e->vertices()[0]->id() == from->vertex->id()  &&  e->vertices()[1]->id() == to->vertex->id()){
+  // 	edge = e;
+  // 	e_index = j;
+  // 	break;
+  //     }
+  //   }
+  //   if(edge == 0){
+  //     continue;
+  //   }
+  //   g2o::EdgeSE3 * tmp = edgesPoses[i];
+  //   edgesPoses[i] = edge;
+  //   edgesPoses[e_index] = tmp;
+  // }
   
   prev = -1;
   for(unsigned int i=0; i<edgesPoses.size(); i++){
