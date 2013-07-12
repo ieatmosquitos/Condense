@@ -429,6 +429,7 @@ int main(int argc, char ** argv){
   std::cout << "edgesLandmarks.size() = " << edgesLandmarks.size() << std::endl;
     
   // order poses by id (if necessary);
+  std::cout << "ordering poses..." << std::endl;
   for(int i=0; i<poses.size(); i++){
     for(int j=i-1; j>=0; j--){
       if(poses[i]->vertex->id() < poses[j]->vertex->id()){
@@ -440,6 +441,7 @@ int main(int argc, char ** argv){
     }
   }
   
+  std::cout << "checking poses order..." << std::endl;
   int prev = -1;
   for(unsigned int i=0; i<poses.size(); i++){
     int id = poses[i]->vertex->id();
@@ -452,6 +454,7 @@ int main(int argc, char ** argv){
   
   
   // order edgesPoses such that edge i connects pose i to pose i+1
+  std::cout << "checking edges order" << std::endl;
   for(unsigned int i=0; i<poses.size()-1; i++){
     VertexWrapper * from = poses[i];
     VertexWrapper * to = poses[i+1];
