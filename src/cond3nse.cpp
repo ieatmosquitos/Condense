@@ -228,12 +228,13 @@ bool checkIntegrity(Star3D * s){
 }
 
 
-void orderLastElement(std::vector<g2o::EdgeSE3 *> * poses){
-  int index = poses->size()-1;
-  while(index > 0 && (*poses)[index]->vertices()[0]->id() < (*poses)[index-1]->vertices()[0]->id()){
-    g2o::EdgeSE3 * tmp = (*poses)[index];
-    (*poses)[index] = (*poses)[index-1];
-    (*poses)[index-1] = tmp;
+void orderLastElement(std::vector<g2o::EdgeSE3 *> &poses){
+  int index = poses.size()-1;
+  while(index > 0 && poses[index]->vertices()[0]->id() < poses[index-1]->vertices()[0]->id()){
+    g2o::EdgeSE3 * tmp = poses[index];
+    poses[index] = poses[index-1];
+    poses[index-1] = tmp;
+    index--;
   }
 }
 
@@ -431,7 +432,7 @@ int main(int argc, char ** argv){
     
     if(isEdgePose){
       edgesPoses.push_back((g2o::EdgeSE3 *)e);
-      orderLastElement(&edgesPoses);
+      orderLastElement(edgesPoses);
     }
     else edgesLandmarks.push_back((g2o::OptimizableGraph::Edge *)e);
   }
