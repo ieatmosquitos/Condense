@@ -14,7 +14,7 @@
 #include "g2o/core/optimization_algorithm_gauss_newton.h"
 #include "g2o/core/optimization_algorithm_levenberg.h"
 #include "g2o/solvers/csparse/linear_solver_csparse.h"
-//#include "g2o/core/robust_kernel_impl.h"
+#include "g2o/core/robust_kernel_impl.h"
 #include "g2o/types/slam3d/types_slam3d.cpp"
 
 #define MAX_IDS 300000
@@ -42,6 +42,10 @@ bool _createPosesEdges; // may be set to false using the -nopos option at launch
 bool _clusterize; // if false, no clusters are made and ONLY BINARY EDGES ARE CREATED
 int _max_clusters;
 int _max_landmarks_per_edge; // set lesser than 1 to let the edge be as big as it wants
+
+
+// ribust kernel
+g2o::RobustKernel * robust_kernel;
 
 
 
@@ -246,7 +250,7 @@ void init(int argc, char** argv){
   
   // initialize options
   _starLength = 20;
-  _optimizationSteps = 50;
+  _optimizationSteps = 100;
   _createPosesEdges = true;
   _clusterize = true;
   _max_clusters = 6;
@@ -313,6 +317,9 @@ void init(int argc, char** argv){
       exit(1);
     }
   }
+  
+  // robust kernel
+  robust_kernel = new g2o::RobustKernelCauchy();
 }
 
 int main(int argc, char ** argv){
@@ -429,6 +436,8 @@ int main(int argc, char ** argv){
 	}
       }  
     }
+    
+    ((g2o::OptimizableGraph::Edge *)e)->setRobustKernel(robust_kernel);
     
     if(isEdgePose){
       edgesPoses.push_back((g2o::EdgeSE3 *)e);
