@@ -139,10 +139,10 @@ int main(int argc, char ** argv){
   // safety checks
   
   // std::cout << "safety checks...";
-  if(optimizer1->vertices().size() != optimizer2->vertices().size()){
-    std::cout << "!!! the two graphs don't have the same number of vertices !!!" << std::endl;
-    return 3;
-  }
+  // if(optimizer1->vertices().size() != optimizer2->vertices().size()){
+  //   std::cout << "!!! the two graphs don't have the same number of vertices !!!" << std::endl;
+  //   return 3;
+  // }
   // std::cout << std::endl;
   
   
@@ -176,7 +176,7 @@ int main(int argc, char ** argv){
   
   initial_chi2 = optimizer2->activeChi2();
   
-  int optim_result = optimizer2->optimize(10);
+  int optim_result = optimizer2->optimize(30);
   
   if(!optim_result){
     optim_fail = true;

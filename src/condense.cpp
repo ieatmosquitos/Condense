@@ -16,7 +16,7 @@
 #include "g2o/core/optimization_algorithm_gauss_newton.h"
 #include "g2o/core/optimization_algorithm_levenberg.h"
 #include "g2o/solvers/csparse/linear_solver_csparse.h"
-//#include "g2o/core/robust_kernel_impl.h"
+#include "g2o/core/robust_kernel_impl.h"
 #include "g2o/types/slam2d/types_slam2d.cpp"
 
 #define MAX_IDS 100000
@@ -45,6 +45,9 @@ bool _clusterize; // if false, no clusters are made and ONLY BINARY EDGES ARE CR
 int _max_clusters;
 int _max_landmarks_per_edge; // set lesser than 1 to let the edge be as big as it wants
 
+
+// robust kernel
+g2o::RobustKernel * robust_kernel;
 
 
 int makeClusters(std::vector<VertexWrapper *> &vertices, int * labels){
@@ -80,19 +83,27 @@ int makeClusters(std::vector<VertexWrapper *> &vertices, int * labels){
 
 
 
-void getSharedEdges(Star2D * s, std::vector<VertexWrapper *> &shared){
+void getSharedEdges(Star2D * s, std::vector<VertexWrapper *> &shared, std::vector<VertexWrapper *> &local){
   // look for shared xyz points
   for(unsigned int i=0; i<s->landmarks.size(); i++){
     VertexWrapper * l = s->landmarks[i];
+    bool isShared = false;
     for(unsigned int e=0; e<l->edges.size(); e++){
       g2o::HyperGraph::Vertex * p =  l->edges[e]->vertices()[0];
       if(!s->contains(p)){
-	shared.push_back(l);
+	isShared = true;
 	break;
       }
     }
+    if(isShared){
+      shared.push_back(l);
+    }
+    else{
+      local.push_back(l);
+    }
   }
   std::cout << "shared XY: " << shared.size() << std::endl;
+  std::cout << "shared+local = " << shared.size() + local.size() << std::endl;
 }
 
 
@@ -115,49 +126,6 @@ void insertSharedEdges(Star2D * s, std::vector<VertexWrapper *> &shared, int clu
 	edge->vertices()[1+i] = to[i]->vertex;
       }
       s->edgesShared.insert(edge);
-    }
-    else{
-      // create many edges connecting the gauge to subsets of the cluster
-      unsigned int count = 0;
-      unsigned int last_index = to.size() - 1;
-      while(count < to.size()){
-	unsigned int so_many = _max_landmarks_per_edge;
-	if(count + so_many > to.size()){
-	  so_many = to.size() - count;
-	}
-	
-	g2o::EdgeSE2LotsOfXY * edge = new g2o::EdgeSE2LotsOfXY();
-	edge->setSize(1 + so_many);
-	edge->vertices()[0] = s->poses[s->gauge_index]->vertex;
-	for(unsigned int v=0; v<so_many; v++){
-	  edge->vertices()[1+v] = to[count+v]->vertex;
-	}
-	s->edgesShared.insert(edge);
-	
-	count += so_many;
-      }
-    }
-  }
-}
-
-
-
-void insertCondensedEdges(Star2D * s, int clusters, int * labels){
-  for(unsigned int c=0; c<clusters; c++){
-    std::vector<VertexWrapper *> to;
-    for(unsigned int i=0; i<s->landmarks.size(); i++){
-      if(labels[i] == c){
-	to.push_back(s->landmarks[i]);
-      }
-    }
-    if(_max_landmarks_per_edge < 1 || _max_landmarks_per_edge > to.size()){
-      // create an edge connecting the gauge to all the landmarks in the cluster
-      g2o::EdgeSE2LotsOfXY * edge = new g2o::EdgeSE2LotsOfXY();
-      edge->setSize(1+to.size());
-      edge->vertices()[0] = s->poses[s->gauge_index]->vertex;
-      for(unsigned int i=0; i<to.size(); i++){
-	edge->vertices()[1+i] = to[i]->vertex;
-      }
       s->edgesCondensed.insert(edge);
     }
     else{
@@ -176,11 +144,24 @@ void insertCondensedEdges(Star2D * s, int clusters, int * labels){
 	for(unsigned int v=0; v<so_many; v++){
 	  edge->vertices()[1+v] = to[count+v]->vertex;
 	}
+	s->edgesShared.insert(edge);
 	s->edgesCondensed.insert(edge);
 	
 	count += so_many;
       }
     }
+  }
+}
+
+
+
+void insertLocalEdges(Star2D * s,  std::vector<VertexWrapper *> &local){
+  for(unsigned int i=0; i<local.size(); i++){
+    g2o::EdgeSE2LotsOfXY * e = new g2o::EdgeSE2LotsOfXY();
+    e->setSize(2);
+    e->vertices()[0] = s->poses[s->gauge_index]->vertex;
+    e->vertices()[1] = local[i]->vertex;
+    s->edgesCondensed.insert(e);
   }
 }
 
@@ -389,6 +370,10 @@ void init(int argc, char** argv){
       exit(1);
     }
   }
+
+  
+  // robust kernel
+  robust_kernel = new g2o::RobustKernelCauchy();
 }
 
 int main(int argc, char ** argv){
@@ -502,6 +487,8 @@ int main(int argc, char ** argv){
 	}
       }
     }
+    
+    ((g2o::OptimizableGraph::Edge *)e)->setRobustKernel(robust_kernel);
     
     if(isEdgePose) edgesPoses.push_back((g2o::EdgeSE2 *)e);
     else edgesLandmarks.push_back((g2o::OptimizableGraph::Edge *)e);
@@ -658,49 +645,15 @@ int main(int argc, char ** argv){
       toOptimize.insert(s->edgesLandmarks[i]);
     }
     optimizer->initializeOptimization(toOptimize);
+    optimizer->computeInitialGuess();
     int optim_result = optimizer->optimize(_optimizationSteps);
-    // if(optim_result<1){
-    //   std::cout << "!!! optimization failed !!!" <<std::endl;
-    //   // don't label according to the optimized graph.
-      
-    //   // go back to the unoptimized state
-    //   // pop all the estimates
-    //   for(unsigned int i=0; i<s->poses.size(); i++){
-    // 	s->poses[i]->vertex->pop();
-    //   }
-    //   for(unsigned int i=0; i<s->landmarks.size(); i++){
-    // 	s->landmarks[i]->vertex->pop();
-    //   }
-      
-    //   // unfix the gauge
-    //   s->poses[s->gauge_index]->vertex->setFixed(false);
-      
-    //   continue;
-      
-    // }
+    
 
-    
-    // shared variables:
-    // the first and the last pose are always shared (except for the first and the last star)
-    if(_createPosesEdges){
-      if(star_index>0){
-	g2o::EdgeSE2 * edge = new g2o::EdgeSE2();
-	edge->vertices()[0] = s->poses[s->gauge_index]->vertex;
-	edge->vertices()[1] = s->poses[0]->vertex;
-	s->edgesShared.insert(edge);
-      }
-      if(star_index<stars.size()-1){
-	g2o::EdgeSE2 * edge = new g2o::EdgeSE2();
-	edge->vertices()[0] = s->poses[s->gauge_index]->vertex;
-	edge->vertices()[1] = s->poses[s->poses.size()-1]->vertex;
-	s->edgesShared.insert(edge);
-      }
-    }
-    
     if(optim_result > 0){
       std::cout << "looking for shared variables" << std::endl;
       std::vector<VertexWrapper *> shared;
-      getSharedEdges(s, shared);
+      std::vector<VertexWrapper *> local; // non-shared variables
+      getSharedEdges(s, shared, local);
       
       if(shared.size() > 0){
 	std::cout << "clustering shared landmarks..." <<std::endl;
@@ -708,22 +661,15 @@ int main(int argc, char ** argv){
 	int clusters = makeClusters(shared, labels);
 	
 	std::cout << "found " << clusters << " clusters" << std::endl;
-	// std::cout << "labels: [";
-	// for(unsigned int i=0; i<shared.size(); i++){
-	//   std::cout << " " << labels[i];
-	// }
-	// std::cout << " ]" << std::endl;
 	
 	insertSharedEdges(s, shared, clusters, labels);
+	insertLocalEdges(s,local);
       }
     }
     
-    std::cout << "labelling edges to shared variables" << std::endl;
-    labeler.labelEdges(s->edgesShared);
     
     
-    // create condensed measurements for the local variables
-    std::cout << "creating condensed edges to star poses" << std::endl;
+    // create condensed measurements for the poses
     if(_createPosesEdges){
       for(unsigned int i=0; i<s->poses.size(); i++){
 	
@@ -739,19 +685,7 @@ int main(int argc, char ** argv){
       }
     }
     
-    if(optim_result > 0){
-      if(s->landmarks.size() > 0){
-	std::cout << "clustering all the landmarks..." <<std::endl;
-	int labels[s->landmarks.size()];
-	int clusters = makeClusters(s->landmarks, labels);
-	
-	std::cout << "found " << clusters << " clusters" << std::endl;
-	
-	insertCondensedEdges(s, clusters, labels);
-      }
-    }
-    
-    std::cout << "labelling condensed edges to all the local variables" << std::endl;
+    std::cout << "labelling condensed edges" << std::endl;
     labeler.labelEdges(s->edgesCondensed);
     
     s->popState();
@@ -764,21 +698,21 @@ int main(int argc, char ** argv){
   std::string manyname = "questo_no";
   prepareOutputName(std::string(argv[1]), fewname, manyname);
   
-  std::cout << "generating file " << fewname << "...";
+  // std::cout << "generating file " << fewname << "...";
   
-  for(unsigned int i=0; i<stars.size(); i++){
-    Star2D * s = stars[i];
+  // for(unsigned int i=0; i<stars.size(); i++){
+  //   Star2D * s = stars[i];
     
-    for(std::set<g2o::OptimizableGraph::Edge *>::iterator it=s->edgesShared.begin(); it!=s->edgesShared.end(); it++){
-      (*it)->setLevel(FEW_LEVEL);
-      optimizer->addEdge((*it));
-    }
-  }
+  //   for(std::set<g2o::OptimizableGraph::Edge *>::iterator it=s->edgesShared.begin(); it!=s->edgesShared.end(); it++){
+  //     (*it)->setLevel(FEW_LEVEL);
+  //     optimizer->addEdge((*it));
+  //   }
+  // }
   
-  std::ofstream ofs1(fewname.c_str());
-  optimizer->save(ofs1, FEW_LEVEL);
+  // std::ofstream ofs1(fewname.c_str());
+  // optimizer->save(ofs1, FEW_LEVEL);
   
-  std::cout << "\tDONE" << std::endl;
+  // std::cout << "\tDONE" << std::endl;
   
   std::cout << "generating file " << manyname << "...";
   

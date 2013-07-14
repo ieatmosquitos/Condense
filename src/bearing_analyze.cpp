@@ -28,8 +28,6 @@ int star_length = -1;
 
 int preoptim = -1;
 
-bool diff_number = false;
-
 void setParameters(char * filename){
   std::string s(filename);
   
@@ -141,11 +139,10 @@ int main(int argc, char ** argv){
   // safety checks
   
   // std::cout << "safety checks...";
-  if(optimizer1->vertices().size() != optimizer2->vertices().size()){
-    std::cout << "!!! the two graphs don't have the same number of vertices !!!" << std::endl;
-    
-    diff_number = true;
-  }
+  // if(optimizer1->vertices().size() != optimizer2->vertices().size()){
+  //   std::cout << "!!! the two graphs don't have the same number of vertices !!!" << std::endl;
+  //   return 3;
+  // }
   // std::cout << std::endl;
   
   
@@ -179,7 +176,7 @@ int main(int argc, char ** argv){
   
   initial_chi2 = optimizer2->activeChi2();
   
-  int optim_result = optimizer2->optimize(30);
+  int optim_result = optimizer2->optimize(50);
   
   if(!optim_result){
     optim_fail = true;
@@ -191,12 +188,7 @@ int main(int argc, char ** argv){
   optimizer2->computeActiveErrors();
   chi2 = optimizer2->activeChi2();
   
-  ofs << argv[1] << "," << argv[2] << "," << star_length << "," << max_clusters << "," << landmarks_per_edge << "," << (make_clusters? " " : "NO CLUST") << "," << initial_chi2 << "," << preoptim << "," << chi2 << "," << (optim_fail? "fail" : "success");
-  if(diff_number){
-    ofs << "!!! DIFF_VERTICES_NUMBER !!!";
-  }
-  ofs << std::endl;
-
+  ofs << argv[1] << "," << argv[2] << "," << star_length << "," << max_clusters << "," << landmarks_per_edge << "," << (make_clusters? " " : "NO CLUST") << "," << initial_chi2 << "," << preoptim << "," << chi2 << "," << (optim_fail? "fail" : "success") << std::endl;
   
   // if(optim_result){
   //   optimizer2->computeActiveErrors();
