@@ -571,13 +571,17 @@ int main(int argc, char ** argv){
     optimizer->computeInitialGuess();
     int optim_result = optimizer->optimize(_optimizationSteps);
     
+    std::vector<VertexWrapper *> shared;
+    std::vector<VertexWrapper *> local;	// non-shared variables
+    
+    std::cout << "looking for shared variables" << std::endl;
+    getSharedEdges(s, shared, local);  
+    
+    if(optim_result < 1){
+      s->popState();
+    }
     
     if(optim_result > 0){
-      std::cout << "looking for shared variables" << std::endl;
-      std::vector<VertexWrapper *> shared;
-      std::vector<VertexWrapper *> local;	// non-shared variables
-      getSharedEdges(s, shared, local);
-      
       if(shared.size() > 0){
 	std::cout << "clustering shared landmarks..." <<std::endl;
 	int labels[shared.size()];
@@ -586,10 +590,10 @@ int main(int argc, char ** argv){
 	std::cout << "found " << clusters << " clusters" << std::endl;
 	
 	insertSharedEdges(s, shared, clusters, labels);
-	insertLocalEdges(s,local);
       }
     }
     
+    insertLocalEdges(s,local);
     
     
     // create condensed measurements for the poses
@@ -611,8 +615,15 @@ int main(int argc, char ** argv){
     std::cout << "labelling condensed edges" << std::endl;
     labeler.labelEdges(s->edgesCondensed);
     
+    // if(optim_result < 1){ // add the original edges instead of the condensed ones
+    //   for(unsigned int i=0; i<s->edgesLandmarks.size(); i++){
+    // 	s->edgesCondensed.insert(s->edgesLandmarks[i]);
+    //   }
+    // }
     
-    s->popState();
+    if(optim_result > 0){
+      s->popState();
+    }
     s->unfixGauge();
     
   }

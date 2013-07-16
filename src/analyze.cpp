@@ -179,7 +179,7 @@ int main(int argc, char ** argv){
   
   initial_chi2 = optimizer2->activeChi2();
   
-  int optim_result = optimizer2->optimize(30);
+  int optim_result = optimizer2->optimize(100);
   
   if(!optim_result){
     optim_fail = true;
@@ -191,7 +191,7 @@ int main(int argc, char ** argv){
   optimizer2->computeActiveErrors();
   chi2 = optimizer2->activeChi2();
   
-  ofs << argv[1] << "," << argv[2] << "," << star_length << "," << max_clusters << "," << landmarks_per_edge << "," << (make_clusters? " " : "NO CLUST") << "," << initial_chi2 << "," << preoptim << "," << chi2 << "," << (optim_fail? "fail" : "success");
+  ofs << argv[1] << "," << argv[2] << "," << optimizer1->vertices().size() << "," << optimizer2->vertices().size() << "," << star_length << "," << max_clusters << "," << landmarks_per_edge << "," << (make_clusters? " " : "NO CLUST") << "," << initial_chi2 << "," << preoptim << "," << chi2 << "," << (optim_fail? "fail" : "success");
   if(diff_number){
     ofs << "!!! DIFF_VERTICES_NUMBER !!!";
   }
