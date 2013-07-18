@@ -35,6 +35,8 @@ void * ids[MAX_IDS];
 int _starLength;
 int _optimizationSteps;
 
+unsigned int _minimum_observations;
+
 // studying impact of poses edges on optimizability
 bool _createPosesEdges; // may be set to false using the -nopos option at launch time
 
@@ -217,6 +219,53 @@ void orderLastElement(std::vector<g2o::EdgeSE3 *> &poses){
 }
 
 
+void purgeLandmarks(Star3D * s){
+  unsigned int dropped = 0;
+  
+  for(unsigned int l=0; l<s->landmarks.size(); l++){
+    VertexWrapper * v = s->landmarks[l];
+    
+    // count how many poses see this landmark within the same star
+    
+    bool remove_it = false;
+    
+    unsigned int count = 0;
+    
+    for(unsigned int i=0; i<v->edges.size(); i++){
+      if(s->contains(v->edges[i]->vertices()[0])){
+	count++;
+	if(count >= _minimum_observations) break;
+      }
+    }
+    
+    if(count < _minimum_observations){
+      remove_it = true;
+    }
+    
+    
+    if(remove_it){
+      dropped++;
+      // should remove this landmark from the star
+       
+      // search the edges in the star that leads to this landmark
+      for(unsigned int i=0; i<s->edgesLandmarks.size(); i++){
+    	if(s->edgesLandmarks[i]->vertices()[1] == v->vertex){
+    	  s->edgesLandmarks.erase(s->edgesLandmarks.begin()+i);
+    	  i--;
+    	}
+      }
+       
+      s->landmarks.erase(s->landmarks.begin()+l);
+      l--;
+       
+    }
+    
+  }
+  
+  std::cout << "dropped: " << dropped << std::endl;
+}
+
+
 void init(int argc, char** argv){
   for(unsigned int i=0; i<MAX_IDS; i++){
     ids[i] = 0;
@@ -229,6 +278,8 @@ void init(int argc, char** argv){
   _clusterize = true;
   _max_clusters = 6;
   _max_landmarks_per_edge = 5;
+  
+  _minimum_observations = 15;
   
   // check specified options
   for(unsigned int i=2; i<argc; i++){
@@ -284,6 +335,16 @@ void init(int argc, char** argv){
 	exit(1);
       }
       _max_landmarks_per_edge = atoi(argv[i]);
+    }
+    
+    else if(option.compare("-obs") == 0){
+      known = true;
+      i++;
+      if(i == argc){
+	std::cerr << "ERROR: no value specified for option " << option << std::endl;
+	exit(1);
+      }
+      _minimum_observations = atoi(argv[i]);
     }
     
     if(!known){
@@ -501,6 +562,7 @@ int main(int argc, char ** argv){
 	//   std::cerr << "THESE STARS MAKE ME MAD!" << std::endl;
 	//   exit(13);
 	// }
+	purgeLandmarks(s);
 	s->gauge_index = (s->poses.size()/2);
       }
       s = new Star3D();
@@ -537,6 +599,7 @@ int main(int argc, char ** argv){
   //    std::cerr << "THESE STARS MAKE ME MAD!" << std::endl;
   //    exit(13);
   // };
+  purgeLandmarks(stars[stars.size()-1]);
   std::cout << "generated " << stars.size() << " stars" << std::endl;
   
   g2o::EdgeLabeler labeler(optimizer);

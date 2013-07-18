@@ -87,9 +87,9 @@ void setParameters(char * filename){
 int main(int argc, char ** argv){
   // check input
   if(argc < 4){
-    std::cout << "Usage: analyze <file1.g2o> <file2.g2o> <log.txt>" << std::endl;
+    std::cout << "Usage: analyze <file1.g2o> <file2.g2o> <outfile.g2o>" << std::endl;
     std::cout << "vertices are taken from file1, edges from file2" << std::endl;
-    std::cout << "informations on the optimization effects are added to the log file" << std::endl;
+    std::cout << "the mixed graph is stored in outfile" << std::endl;
     return 0;
   }
   
@@ -127,8 +127,7 @@ int main(int argc, char ** argv){
     return 2;
   }
   
-  std::ofstream ofs;
-  ofs.open(argv[3], std::ios_base::app);
+  std::ofstream ofs(argv[3]);
   
   // std::cout << "graph #1:" << std::endl;
   // std::cout << "\tLoaded " << optimizer1->vertices().size() << " vertices" << std::endl;
@@ -169,34 +168,9 @@ int main(int argc, char ** argv){
     
   }
   
+  optimizer2->save(ofs);
   
-  optimizer2->initializeOptimization();
-  optimizer2->computeActiveErrors();
-  
-  // ofs << "estimates from: " << argv[1] << std::endl;
-  // ofs << "edges from: " << argv[2] << std::endl;
-  // ofs << "initial chi^2: " << optimizer2->activeChi2() << std::endl;
-  
-  initial_chi2 = optimizer2->activeChi2();
-  
-  int optim_result = optimizer2->optimize(10);
-  
-  if(!optim_result){
-    optim_fail = true;
-  }
-  else{
-    optim_fail = false;
-  }
-  
-  optimizer2->computeActiveErrors();
-  chi2 = optimizer2->activeChi2();
-  
-  ofs << argv[1] << "," << argv[2] << "," << optimizer1->vertices().size() << "," << optimizer2->vertices().size() << "," << star_length << "," << max_clusters << "," << landmarks_per_edge << "," << (make_clusters? " " : "NO CLUST") << "," << initial_chi2 << "," << preoptim << "," << chi2 << "," << (optim_fail? "fail" : "success");
-  if(diff_number){
-    ofs << "!!! DIFF_VERTICES_NUMBER !!!";
-  }
-  ofs << std::endl;
-
+  std::cout << "files mixed, output saved to " << argv[3] << std::endl;
   
   // if(optim_result){
   //   optimizer2->computeActiveErrors();

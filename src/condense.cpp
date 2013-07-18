@@ -16,6 +16,7 @@
 #include "g2o/core/optimization_algorithm_gauss_newton.h"
 #include "g2o/core/optimization_algorithm_levenberg.h"
 #include "g2o/solvers/csparse/linear_solver_csparse.h"
+#include "g2o/core/optimization_algorithm_with_hessian.h"
 #include "g2o/core/robust_kernel_impl.h"
 #include "g2o/types/slam2d/types_slam2d.cpp"
 
@@ -37,6 +38,8 @@ void * ids[MAX_IDS];
 int _starLength;
 int _optimizationSteps;
 
+unsigned int _minimum_observations;
+
 // studying impact of poses edges on optimizability
 bool _createPosesEdges;
 
@@ -48,6 +51,10 @@ int _max_landmarks_per_edge; // set lesser than 1 to let the edge be as big as i
 
 // robust kernel
 g2o::RobustKernel * robust_kernel;
+
+
+// solverWithHessian
+g2o::OptimizationAlgorithmWithHessian* solverWithHessian;
 
 
 int makeClusters(std::vector<VertexWrapper *> &vertices, int * labels){
@@ -212,71 +219,122 @@ void prepareOutputName(std::string original, std::string & fewout, std::string &
 
 void purgeLonelyLandmarks(Star2D * s){
   
+  // std::cerr << "purging star..." << std::endl;
+  unsigned int dropped = 0;
+  
   for(unsigned int l=0; l<s->landmarks.size(); l++){
     VertexWrapper * v = s->landmarks[l];
     
     // count how many poses see this landmark within the same star
-    unsigned int count=0;
-    bool isBearing = false;
-    bool areAllBearings = true;
-     
-    for(unsigned int i = 0; i<v->edges.size(); i++){
-      
-      g2o::OptimizableGraph::Edge * e = v->edges[i];
-      
-      if(s->contains(e->vertices()[0])){
- 	count++;
- 	g2o::EdgeSE2PointXYBearing * b = dynamic_cast<g2o::EdgeSE2PointXYBearing *>(e);
- 	if(b!=NULL){
- 	  isBearing = true;
- 	}
-	else{
-	  areAllBearings = false;
-	}
+    
+    bool remove_it = false;
+    
+    unsigned int count = 0;
+    
+    for(unsigned int i=0; i<v->edges.size(); i++){
+      if(s->contains(v->edges[i]->vertices()[0])){
+	count++;
+	if(count >= _minimum_observations) break;
       }
     }
     
-    bool remove_it = false;
-     
-    // std::cout << "landmark " << v->vertex->id() << " has " << v->edges.size() << " edges" << std::endl;
-    // std::cout << "seen by " << count << " poses inside the star" << std::endl;
-    if(count < 1){
-      std::cerr << "implementation is bugged! check the purgeLonelyLandmarks() function" << std::endl;
-      exit(11);
-    }
-     
-    if(count < 2 && isBearing){
+    if(count < _minimum_observations){
       remove_it = true;
     }
-    else{ // check if the point is stable enough
+    
+    // if (solverWithHessian) {
+    //   // std::cerr << "size: " << toOptimize.size() << "...";
+    //   // std::cerr << "initialize...";
+    //   optimizer->initializeOptimization(toOptimize); 
+    //   // std::cerr << "guess...";
+    //   optimizer->computeInitialGuess();
+    //   // std::cerr << "solver init...";
+    //   optimizer->solver()->init();
+    //   // std::cerr << "structure...";
+    //   if (!solverWithHessian->buildLinearStructure())
+    //   std::cerr << "FATAL: failure while building linear structure" << std::endl;
+    //   // std::cerr << "errors...";
+    //   optimizer->computeActiveErrors();
+    //   // std::cerr << "system...";
+    //   solverWithHessian->updateLinearSystem();
+    //   // cerr << "directSolove" << endl;
+    // }
+    // else {
+    //   std::cerr << "FATAL: hierarchical thing cannot be used with a solver that does not support the system structure construction" << std::endl;
+    // }
+    
+    
+    // std::cerr << "computing dirsolve...";
+    // double dirsolve = v->vertex->solveDirect();
+    // if(dirsolve > 0.001){
+    //   std::cout << "dir_solve: " << dirsolve << std::endl;
+    //   remove_it = true;
+    // }
+    
+
+        
+    // s->popState();
+    // s->unfixGauge();
+    
+    // for(unsigned int i = 0; i<v->edges.size(); i++){
       
-      if(areAllBearings){
-	// build a linear system gathering the informations from the bearings measured from the poses
-	
-	linSystem linsys;
-	for(unsigned int i = 0; i<v->edges.size(); i++){
-      	  g2o::OptimizableGraph::Edge * e = v->edges[i];
-	  if(s->contains(e->vertices()[0])){
-	    g2o::VertexSE2 * pose = dynamic_cast<g2o::VertexSE2 *>(e->vertices()[0]);
-	    if(!pose){
-	      std::cerr << "watch out! the code is bugged. Look for this sentence in condense.cpp" << std::endl;
-	      exit(20);
-	    }
-	    
-	    g2o::EdgeSE2PointXYBearing * b = (g2o::EdgeSE2PointXYBearing *) e;
-	    linsys.addConstraint(pose->estimate()[0], pose->estimate()[1], pose->estimate()[2], b->measurement());
-	  }
-	  
-      	}
-	
-	if(!linsys.checkStability()){
-	  remove_it = true;
-	}
-	 
-      }
-    }
+    //   g2o::OptimizableGraph::Edge * e = v->edges[i];
+      
+    //   if(s->contains(e->vertices()[0])){
+    // 	count++;
+    // 	g2o::EdgeSE2PointXYBearing * b = dynamic_cast<g2o::EdgeSE2PointXYBearing *>(e);
+    // 	if(b!=NULL){
+    // 	  isBearing = true;
+    // 	}
+    // 	else{
+    // 	  areAllBearings = false;
+    // 	}
+    //   }
+    // }
+    
+         
+    // // std::cout << "landmark " << v->vertex->id() << " has " << v->edges.size() << " edges" << std::endl;
+    // // std::cout << "seen by " << count << " poses inside the star" << std::endl;
+    // if(count < 1){
+    //   std::cerr << "implementation is bugged! check the purgeLonelyLandmarks() function" << std::endl;
+    //   exit(11);
+    // }
      
+    // if(count < 2 && isBearing){
+    //   remove_it = true;
+    // }
+    // else{ // check if the point is stable enough
+      
+    //   if(areAllBearings){
+    // 	// build a linear system gathering the informations from the bearings measured from the poses
+	
+    // 	linSystem linsys;
+    // 	for(unsigned int i = 0; i<v->edges.size(); i++){
+    //   	  g2o::OptimizableGraph::Edge * e = v->edges[i];
+    // 	  if(s->contains(e->vertices()[0])){
+    // 	    g2o::VertexSE2 * pose = dynamic_cast<g2o::VertexSE2 *>(e->vertices()[0]);
+    // 	    if(!pose){
+    // 	      std::cerr << "watch out! the code is bugged. Look for this sentence in condense.cpp" << std::endl;
+    // 	      exit(20);
+    // 	    }
+	    
+    // 	    g2o::EdgeSE2PointXYBearing * b = (g2o::EdgeSE2PointXYBearing *) e;
+    // 	    linsys.addConstraint(pose->estimate()[0], pose->estimate()[1], pose->estimate()[2], b->measurement());
+    // 	  }
+	  
+    //   	}
+	
+    // 	if(!linsys.checkStability()){
+    // 	  remove_it = true;
+    // 	}
+	
+	 
+    //   }
+    // }
+    // std::cerr << "check_remove...";
     if(remove_it){
+      dropped++;
+      // std::cerr << "removing... ";
       // should remove this landmark from the star
        
       // search the edge in the star that leads to this landmark
@@ -291,7 +349,12 @@ void purgeLonelyLandmarks(Star2D * s){
       l--;
        
     }
+    // std::cerr << "go on..." << std::endl;
+    
   }
+  
+  // std::cerr << "done" << std::endl;
+  std::cout << "dropped: " << dropped << std::endl;
 }
 
 
@@ -308,6 +371,8 @@ void init(int argc, char** argv){
   _clusterize = true;
   _max_clusters = 6;
   _max_landmarks_per_edge = 5;
+  
+  _minimum_observations = 3;
   
   // check options from command line
   for(unsigned int i=2; i<argc; i++){
@@ -365,6 +430,16 @@ void init(int argc, char** argv){
       _max_landmarks_per_edge = atoi(argv[i]);
     }
     
+    else if(option.compare("-obs") == 0){
+      known = true;
+      i++;
+      if(i == argc){
+	std::cerr << "ERROR: no value specified for option " << option << std::endl;
+	exit(1);
+      }
+      _minimum_observations = atoi(argv[i]);
+    }
+    
     if(!known){
       std::cerr << "ERROR: unknown command: " << option << std::endl;
       exit(1);
@@ -413,6 +488,8 @@ int main(int argc, char ** argv){
   
   optimizer->setAlgorithm(solver);
   blockSolver->setOptimizer(optimizer);
+  
+  solverWithHessian = dynamic_cast<g2o::OptimizationAlgorithmWithHessian*>(optimizer->solver());
   
   // load the graph
   std::ifstream ifs(argv[1]);
