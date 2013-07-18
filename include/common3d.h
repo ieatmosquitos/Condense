@@ -99,12 +99,26 @@ struct Star3D{
 
 // finds the VertexWrapper pointer in the given list.
 // RETURNS 0 if not found
-VertexWrapper * findWrapper(std::vector<VertexWrapper *> wrappers, g2o::HyperGraph::Vertex * toFind){
+VertexWrapper * findWrapper(std::vector<VertexWrapper *> &wrappers, g2o::HyperGraph::Vertex * toFind){
   for(unsigned int i=0; i<wrappers.size(); i++){
     if (wrappers[i]->vertex->id() == toFind->id()) return wrappers[i];
   }
   return 0;
 
+}
+
+int findWrapperIndex(std::vector<VertexWrapper *> &wrappers, g2o::HyperGraph::Vertex * toFind){
+  for(unsigned int i=0; i<wrappers.size(); i++){
+    if (wrappers[i]->vertex->id() == toFind->id()) return i;
+  }
+  return -1;
+}
+
+int findWrapperIndex(VertexWrapper ** wrappers, unsigned int finish, g2o::HyperGraph::Vertex * toFind){
+  for(unsigned int i=0; i<finish; i++){
+    if (wrappers[i]->vertex->id() == toFind->id()) return i;
+  }
+  return -1;
 }
 
 #endif // _COMMON3D_H

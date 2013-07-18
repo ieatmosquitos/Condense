@@ -21,7 +21,7 @@ add_executable( condense src/condense.cpp src/edge_labeler.cpp)
 #add_executable( multicondense src/multicondense.cpp src/edge_labeler.cpp)
 #add_executable( visualize src/visualizer.cpp src/drawer.cpp )
 #add_executable( listedges src/listedges)
-add_executable( cond3nse src/cond3nse.cpp src/edge_labeler.cpp)
+add_executable( cond3nse src/condenser.cpp src/edge_labeler.cpp)
 #add_executable( bestguess src/best_guess.cpp)
 #add_executable( difference2d src/difference2d.cpp)
 #add_executable( distance2d src/distance2d.cpp)
@@ -44,6 +44,7 @@ target_link_libraries( cond3nse ${CSPARSE_LIBRARY} ${Eigen_LIBS} g2o_core g2o_ty
 target_link_libraries( setzero ${CSPARSE_LIBRARY} ${Eigen_LIBS} g2o_core g2o_types_slam3d g2o_types_slam2d g2o_stuff g2o_solver_csparse g2o_csparse_extension)
 target_link_libraries( analyze ${CSPARSE_LIBRARY} ${Eigen_LIBS} g2o_core g2o_types_slam3d g2o_types_slam2d g2o_stuff g2o_solver_csparse g2o_csparse_extension)
 target_link_libraries( mixer ${CSPARSE_LIBRARY} ${Eigen_LIBS} g2o_core g2o_types_slam3d g2o_types_slam2d g2o_stuff g2o_solver_csparse g2o_csparse_extension)
+
 
 
 execute_process(COMMAND ${CMAKE_COMMAND} -E copy_directory
