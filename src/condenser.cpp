@@ -803,11 +803,16 @@ int main(int argc, char ** argv){
 	std::cout << "closing star " << stars.size() << std::endl;
 	std::cout << "poses in the star: " << s->poses.size() << std::endl;
 	std::cout << "landmarks (not yet confirmed):" << cand_index_next << std::endl;
-	// confirm or reject landmarks
-	unsigned int kept = confirmLandmarks(candidates, cand_edges, cand_index_next, cand_edges_index_next, s, optimizer);
+	if(s->poses.size() > 3){
+	  // confirm or reject landmarks
+	  unsigned int kept = confirmLandmarks(candidates, cand_edges, cand_index_next, cand_edges_index_next, s, optimizer);
 	  
-	std::cout << "dropped: " << cand_index_next - kept << "\t; kept: " << kept << std::endl;
-
+	  std::cout << "dropped: " << cand_index_next - kept << "\t; kept: " << kept << std::endl;
+	}
+	else{
+	  std::cout << "star is too small, ignoring its edges" << std::endl;
+	}
+	
 	// clear stuff
 	for(unsigned int ce=0; ce<cand_index_next; ce++){
 	  free(cand_edges[ce]);
