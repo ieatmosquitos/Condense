@@ -55,7 +55,7 @@ int main(int argc, char ** argv){
 
   g2o::HyperGraph::VertexIDMap vertices = optimizer->vertices();
   
-  double estimate[6] = {0, 0, 0, 0, 0, 1}; // this should be big enough for every kind of vertex
+  double estimate[7] = {0, 0, 0, 0, 0, 0, 1}; // this should be big enough for every kind of vertex
   
   for(g2o::HyperGraph::VertexIDMap::iterator it=vertices.begin(); it!=vertices.end(); it++){
     g2o::OptimizableGraph::Vertex * v = (g2o::OptimizableGraph::Vertex *) it->second;

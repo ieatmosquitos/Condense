@@ -304,7 +304,7 @@ unsigned int confirmLandmarks(VertexWrapper ** candidates, g2o::OptimizableGraph
     double eigen_ratio=emin/emax;
     //    std::cerr << "ratio computed" << std::endl;
     
-    if(eigen_ratio > 1e-3){
+    if(eigen_ratio > 1e-2){
       accept_it = true;
     }
     
