@@ -36,6 +36,7 @@ int _starLength;
 int _optimizationSteps;
 
 unsigned int _minimum_observations;
+double _tolerance;
 
 // studying impact of poses edges on optimizability
 bool _createPosesEdges; // may be set to false using the -nopos option at launch time
@@ -304,7 +305,7 @@ unsigned int confirmLandmarks(VertexWrapper ** candidates, g2o::OptimizableGraph
     double eigen_ratio=emin/emax;
     //    std::cerr << "ratio computed" << std::endl;
     
-    if(eigen_ratio > 1e-3){
+    if(eigen_ratio > 5e-3){
       accept_it = true;
     }
     
@@ -466,7 +467,8 @@ void init(int argc, char** argv){
   _max_landmarks_per_edge = 5;
   
   _minimum_observations = 1;
-  
+  _tolerance = 5e-3;
+
   // check specified options
   for(unsigned int i=2; i<argc; i++){
     std::string option(argv[i]);
@@ -533,6 +535,16 @@ void init(int argc, char** argv){
       _minimum_observations = atoi(argv[i]);
     }
     
+    else if(option.compare("-tol") == 0){
+      known = true;
+      i++;
+      if(i == argc){
+	std::cerr << "ERROR: no value specified for option " << option << std::endl;
+	exit(1);
+      }
+      _tolerance = atof(argv[i]);
+    }
+    
     if(!known){
       std::cerr << "ERROR: unknown command: " << option << std::endl;
       exit(1);
@@ -569,6 +581,8 @@ int main(int argc, char ** argv){
   std::cout << "INFO: _clusterize = " << _clusterize << std::endl;
   std::cout << "INFO: _max_clusters = " << _max_clusters << std::endl;
   std::cout << "INFO: _max_landmarks_per_edge = " << _max_landmarks_per_edge << std::endl;
+  std::cout << "INFO: _minimum_observations = " << _minimum_observations << std::endl;
+  std::cout << "INFO: _tolerance = " << _tolerance << std::endl;
 
   // allocate the optimizer
   g2o::SparseOptimizer * optimizer = new g2o::SparseOptimizer();
