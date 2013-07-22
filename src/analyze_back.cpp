@@ -86,10 +86,9 @@ void setParameters(char * filename){
 
 int main(int argc, char ** argv){
   // check input
-  if(argc < 5){
-    std::cout << "Usage: analyze <file1.g2o> <file2.g2o> <temp> <log.txt>" << std::endl;
+  if(argc < 4){
+    std::cout << "Usage: analyze <file1.g2o> <file2.g2o> <log.txt>" << std::endl;
     std::cout << "vertices are taken from file1, edges from file2" << std::endl;
-    std::cout << "<temp> is a file used for intermediate processing" << std::endl;
     std::cout << "informations on the optimization effects are added to the log file" << std::endl;
     return 0;
   }
@@ -99,16 +98,15 @@ int main(int argc, char ** argv){
   // allocate the optimizers
   g2o::SparseOptimizer * optimizer1 = new g2o::SparseOptimizer();	// vertices taken from here
   g2o::SparseOptimizer * optimizer2 = new g2o::SparseOptimizer();	// edges taken from here
-  g2o::SparseOptimizer * optimizer3 = new g2o::SparseOptimizer();	// used to compute the error
   SlamLinearSolver* linearSolver = new SlamLinearSolver();
   linearSolver->setBlockOrdering(false);
   SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
-  g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(blockSolver);
-  //g2o::OptimizationAlgorithmGaussNewton * solver = new g2o::OptimizationAlgorithmGaussNewton(blockSolver);
+  //g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(blockSolver);
+  g2o::OptimizationAlgorithmGaussNewton * solver = new g2o::OptimizationAlgorithmGaussNewton(blockSolver);
   
   optimizer1->setAlgorithm(solver);
   optimizer2->setAlgorithm(solver);
-  optimizer3->setAlgorithm(solver);
+  //optimizer3->setAlgorithm(solver);
   
   // load the graphs
   std::ifstream ifs1(argv[1]);
@@ -131,7 +129,7 @@ int main(int argc, char ** argv){
   }
   
   std::ofstream ofs;
-  ofs.open(argv[4], std::ios_base::app);
+  ofs.open(argv[3], std::ios_base::app);
   
   // std::cout << "graph #1:" << std::endl;
   // std::cout << "\tLoaded " << optimizer1->vertices().size() << " vertices" << std::endl;
@@ -154,109 +152,42 @@ int main(int argc, char ** argv){
   
   g2o::HyperGraph::VertexIDMap map1 = optimizer1->vertices();
   g2o::HyperGraph::VertexIDMap map2 = optimizer2->vertices();
-  g2o::HyperGraph::VertexIDMap map3 = optimizer3->vertices();
   
-  double estimate[100];
-  int removedVert = 0;
-  int removedEdg = 0;
-  for(g2o::HyperGraph::EdgeSet::iterator it=optimizer2->edges().begin(); it!=optimizer2->edges().end(); it++){
-    g2o::HyperGraph::Edge * e = (*it);
+  // for(g2o::HyperGraph::EdgeSet::iterator it=optimizer->edges().begin(); it!=optimizer->edges().end(); it++){
+  //   g2o::HyperGraph::Edge * e = (*it);
     
-    g2o::OptimizableGraph::Edge * pose = dynamic_cast<g2o::EdgeSE2 *>(e);
-    if(pose == NULL){
-      pose = dynamic_cast<g2o::EdgeSE3 *>(e);
-    }
-    
-    // if(pose != NULL){//it's an odometry edge, both vertices must be added (if not present) in the 3rd graph
-    //   g2o::HyperGraph::Vertex * v1 = e->vertices()[0];
-    //   g2o::HyperGraph::Vertex * v2 = e->vertices()[1];
-      
-    //   if(map3[v1->id()]==0){
-    // 	optimizer3->addVertex(v1);
-    //   }
-    //   else{
-    // 	std::cout << "it was already there!" << std::endl;
-    //   }
-    //   if(map3[v2->id()]==0){
-    // 	optimizer3->addVertex(v2);
-    //   }
-    //   optimizer3->addEdge(e);
-    // }
-    
-    if(pose != NULL){
-      g2o::OptimizableGraph::Vertex * v1 = (g2o::OptimizableGraph::Vertex *) e->vertices()[0];
-      g2o::OptimizableGraph::Vertex * v2 = (g2o::OptimizableGraph::Vertex *) e->vertices()[1];
-      
-      g2o::OptimizableGraph::Vertex * c1 = (g2o::OptimizableGraph::Vertex *) map1[v1->id()];	// corresponding vertex in the other graph
-      if(c1 != 0){
-	c1->getEstimateData(estimate);
-	v1->setEstimateData(estimate);
-      }
-      else{
-	optimizer2->removeVertex(v1);
-	removedVert++;
-      }
-      
-      g2o::OptimizableGraph::Vertex * c2 = (g2o::OptimizableGraph::Vertex *) map1[v2->id()];	// corresponding vertex in the other graph
-      if(c2 != 0){
-	c2->getEstimateData(estimate);
-	v2->setEstimateData(estimate);
-      }
-      else{
-	optimizer2->removeVertex(v2);
-	removedVert++;
-      }
-      
-      if(c1 == 0 || c2 == 0){
-	optimizer2->removeEdge(e);
-	removedEdg++;
-      }
-      
-      continue;
-    }
-    
-    g2o::HyperGraph::Vertex * v = e->vertices()[1];
-    if(map1[v->id()] == 0){
-      optimizer2->removeVertex(v);
-      removedVert++;
-      optimizer2->removeEdge(e);
-      removedEdg++;
-    }
-    else{
-      g2o::OptimizableGraph::Vertex * v = (g2o::OptimizableGraph::Vertex *) e->vertices()[1];
-      g2o::OptimizableGraph::Vertex * c = (g2o::OptimizableGraph::Vertex *) map1[v->id()];
-      
-      c->getEstimateData(estimate);
-      v->setEstimateData(estimate);
-    }
-  }
+  //   if()
+  // }
   
-  std::cout << "removed " << removedVert << " vertices and " << removedEdg << " edges" << std::endl;
-  
+  // exit(0);
   //  optimizer2->initializeOptimization();
   //  optimizer2->optimize(10);
   //  optimizer2->computeActiveErrors();
   //  ideal_chi2 = optimizer2->activeChi2();
   
-  std::ofstream outfs(argv[3]);
-  optimizer2->save(outfs);
-  outfs.close();
   
-  optimizer2->clear();
+  double estimate[100];
+  for(g2o::HyperGraph::VertexIDMap::iterator it=map1.begin(); it!=map1.end(); it++){
+    g2o::OptimizableGraph::Vertex * v1 = (g2o::OptimizableGraph::Vertex *) it->second;
+    // look for the same vertex in the other map
+    g2o::OptimizableGraph::Vertex * v2 = (g2o::OptimizableGraph::Vertex *) map2[v1->id()];
+    
+    v1->getEstimateData(estimate);
+    v2->setEstimateData(estimate);
+    
+  }
   
-  std::ifstream reloader(argv[3]);
-  optimizer3->load(reloader);
   
-  optimizer3->initializeOptimization();
-  optimizer3->computeActiveErrors();
+  optimizer2->initializeOptimization();
+  optimizer2->computeActiveErrors();
   
   // ofs << "estimates from: " << argv[1] << std::endl;
   // ofs << "edges from: " << argv[2] << std::endl;
   // ofs << "initial chi^2: " << optimizer2->activeChi2() << std::endl;
   
-  initial_chi2 = optimizer3->activeChi2();
+  initial_chi2 = optimizer2->activeChi2();
   
-  int optim_result = optimizer3->optimize(10);
+  int optim_result = optimizer2->optimize(10);
   
   if(!optim_result){
     optim_fail = true;
@@ -265,8 +196,8 @@ int main(int argc, char ** argv){
     optim_fail = false;
   }
   
-  optimizer3->computeActiveErrors();
-  chi2 = optimizer3->activeChi2();
+  optimizer2->computeActiveErrors();
+  chi2 = optimizer2->activeChi2();
   
   ofs << argv[1] << "," << argv[2] << "," << optimizer1->vertices().size() << "," << optimizer2->vertices().size() << "," << star_length << "," << max_clusters << "," << landmarks_per_edge << "," << (make_clusters? " " : "NO CLUST") << "," << initial_chi2 << "," << preoptim << "," << chi2 << "," << (optim_fail? "fail" : "success");
   if(diff_number){
